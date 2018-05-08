@@ -1,12 +1,15 @@
 library(shiny)
 source("global.R")
 
+options(shiny.maxRequestSize=100*1024^2)
+
 shinyServer(function(input, output, session) {
 # ------------------------------------------------------------- SESSION ----
 
 	# allow reconnection by a certain grace period
 	session$allowReconnect(T)
 
+# ------------------------------------------------------------- APP 1 (BFAST) ----
 # ------------------------------------------------------------- SHARED ----
 
 	# reactive values
@@ -910,7 +913,7 @@ shinyServer(function(input, output, session) {
 		})
 	})
 
-	########## Download
+# ------------------------------------------------------------- APP 2 (DOWNLOAD) ----
 
 	pixel_filedata <- reactive({
 		infile <- input$pixel_datafile
@@ -1190,11 +1193,42 @@ shinyServer(function(input, output, session) {
 		}
 	})
 
-	# tsr
+# ------------------------------------------------------------- APP 3 (TSR) ----
+
+
+	# observeEvent(input$pixel_datafile, ignoreNULL = F, {
+	# 	shinyjs::toggleState(
+	# 		id = "pixel_botaoDownload",
+	# 		condition = !is.null(input$pixel_datafile)
+	# 	)
+	# 	shinyjs::toggleState(
+	# 		id = "pixel_showMap",
+	# 		condition = !is.null(input$pixel_datafile)
+	# 	)
+	# })
+
+
+	pathGrd <- eventReactive(input$arquivo, {
+
+		# eh necessario renomear o nome do arquivo gri, pois o shiny copia os arquivos
+		# com nomes diferentes na pasta temporaria
+
+		old_name <- input$arquivo$datapath[2]
+		new_name <- paste0(substr(input$arquivo$datapath[2],
+										  start = 1,
+										  stop = nchar(input$arquivo$datapath[2])-5),
+								 "0.gri"
+		)
+
+		system(paste("mv", old_name, new_name))
+
+		return(input$arquivo)
+	})
+
 	# acessar com s2()
 	s2 <- eventReactive(input$botaoLeitura, {
 		withProgress(message = 'Reading input data...', value = NULL, {
-			stack(paste0("data/", input$arquivo, ".grd"))
+			stack(pathGrd()$datapath[1])
 		})
 	})
 
@@ -1216,8 +1250,10 @@ shinyServer(function(input, output, session) {
 	# Aba Visualizacao
 	# ----------------
 	# outputSlider_1
-	output$outputSlider_1 <- renderUI({
-		sliderInput("t", "t", value = 1, min = 1, max = nlayers(s2()), step = 1)
+	observeEvent(input$botaoLeitura, {
+		output$outputSlider_1 <- renderUI({
+			sliderInput("t", "t", value = 1, min = 1, max = nlayers(s2()), step = 1)
+		})
 	})
 
 	# outputSlider_2
@@ -1232,19 +1268,23 @@ shinyServer(function(input, output, session) {
 
 	# plot da regiao de estudo
 	output$plot_1 <- renderPlot({
-		par(mar=c(4,2,1,1)+0.1)
-		image(s2()[[input$t]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
-		axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
-		axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
-		points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=19, col="white", cex=1.5)
-		points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=21, col="black", cex=1.5)
+		if(length(input$t) > 0) {
+			par(mar=c(4,2,1,1)+0.1)
+			image(s2()[[input$t]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
+			axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
+			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
+			points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=19, col="white", cex=1.5)
+			points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=21, col="black", cex=1.5)
+		}
 	})
 
 	# plot da serie temporal dado um ponto (x,y)
 	output$plot_2 <- renderPlot({
-		par(mar=c(4,2,1,1)+0.1)
-		plot(v2()[input$x + ncol(s2())*(input$y-1),], type="l", xlab="Time", ylab="NDVI", ylim=c(min(v2()),max(v2())))
-		abline(v=input$t, col="red")
+		if((length(input$x) > 0) & (length(input$y) > 0)) {
+			par(mar=c(4,2,1,1)+0.1)
+			plot(v2()[input$x + ncol(s2())*(input$y-1),], type="l", xlab="Time", ylab="NDVI", ylim=c(min(v2()),max(v2())))
+			abline(v=input$t, col="red")
+		}
 	})
 
 	# Aba Consulta
@@ -1257,11 +1297,28 @@ shinyServer(function(input, output, session) {
 		sliderInput("y_querySlider", "y", value = 1, min = 1, max = nrow(s2()), step = 1)
 	})
 
+	output$outputSlider_6 <- renderUI({
+		sliderInput("t_querySlider", "t", value = 1, min = 1, max = nlayers(s2()), step = 1)
+	})
+
 	output$plot_3 <- renderPlot({
-		par(mar=c(4,2,1,1)+0.1)
-		image(s2()[[input$t]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
-		axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
-		axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
+		if(length(input$t_querySlider) > 0) {
+			par(mar=c(4,2,1,1)+0.1)
+			image(s2()[[input$t_querySlider]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
+			axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
+			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
+		}
+	})
+
+	output$plot_3b <- renderPlot({
+		if(length(input$t_querySlider) > 0) {
+			par(mar=c(4,2,1,1)+0.1)
+			image(s2()[[input$t_querySlider]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
+			axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
+			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
+			points(extent(s2())[1]+res(s2())[1]*input$x_querySlider, extent(s2())[4]-res(s2())[2]*input$y_querySlider, pch=19, col="white", cex=1.5)
+			points(extent(s2())[1]+res(s2())[1]*input$x_querySlider, extent(s2())[4]-res(s2())[2]*input$y_querySlider, pch=21, col="black", cex=1.5)
+		}
 	})
 
 	output$outputPlotClick <- renderPrint({
@@ -1269,70 +1326,70 @@ shinyServer(function(input, output, session) {
 			  y = round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2]))
 	})
 
-	output$plot_4a <- renderPlot({
-		input$botaoConsulta
 
-		withProgress(message = 'Processing query...', value = NULL, {
-			isolate({
-				if (input$tipo_entrada == "Specifying (x,y)") {
-					qx <- input$x_querySlider
-					qy <- input$y_querySlider
-				} else {
-					qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
-					qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
-				}
+	observeEvent(input$botaoConsulta, {
+		output$plot_4a <- renderPlot({
 
-				q <- qx + ncol(s2())*(qy-1)
-
-				m <- matrix(0, nrow(s2()), ncol(s2()))
-				dist <- c()
-
-				if(length(qx) > 0 && length(qy) > 0) {
-					if (input$algoritmo == "DTW Distance") {
-						for (i in 1:ncell(s2())) dist[i] <- distDTWC(v2()[q,], v2()[i,])
-					} else if (input$algoritmo == "Manhattan Distance") {
-						for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 1)
-					} else if (input$algoritmo == "Euclidian Distance") {
-						for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 2)
-					} else if (input$algoritmo == "Chebyshev Distance") {
-						for (i in 1:ncell(s2())) dist[i] <- distChebC(v2()[q,], v2()[i,])
-					} else if (input$algoritmo == "Cosine Similarity") {
-						for (i in 1:ncell(s2())) dist[i] <- simCosC(v2()[q,], v2()[i,])
+			withProgress(message = 'Processing query...', value = NULL, {
+				isolate({
+					if (input$tipo_entrada == "Specify the point (x,y)") {
+						qx <- input$x_querySlider
+						qy <- input$y_querySlider
+					} else {
+						qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
+						qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
 					}
 
-					# constroi a imagem de saida
-					for(i in 1:nrow(s2())) {
-						for(j in 1:ncol(s2())) {
-							m[i,j] <- dist[j+(i-1)*ncol(s2())]
+					q <- qx + ncol(s2())*(qy-1)
+
+					m <- matrix(0, nrow(s2()), ncol(s2()))
+					dist <- c()
+
+					if(length(qx) > 0 && length(qy) > 0) {
+						if (input$algoritmo == "DTW Distance") {
+							for (i in 1:ncell(s2())) dist[i] <- distDTWC(v2()[q,], v2()[i,])
+						} else if (input$algoritmo == "Manhattan Distance") {
+							for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 1)
+						} else if (input$algoritmo == "Euclidian Distance") {
+							for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 2)
+						} else if (input$algoritmo == "Chebyshev Distance") {
+							for (i in 1:ncell(s2())) dist[i] <- distChebC(v2()[q,], v2()[i,])
+						} else if (input$algoritmo == "Cosine Similarity") {
+							for (i in 1:ncell(s2())) dist[i] <- simCosC(v2()[q,], v2()[i,])
 						}
-					}
 
-					# gira a imagem de saida para plotar corretamente
-					m <- t(m[nrow(m):1,])
+						# constroi a imagem de saida
+						for(i in 1:nrow(s2())) {
+							for(j in 1:ncol(s2())) {
+								m[i,j] <- dist[j+(i-1)*ncol(s2())]
+							}
+						}
 
-					# plota imagem para diferentes limiares
-					par(mar=c(4,2,1,1)+0.1)
-					if(length(grep("similarity", input$algoritmo, ignore.case = T))>0) {
-						image((m-min(m))/max(m-min(m)), col=colSim(29), xaxt="n", yaxt="n")
-					} else {
-						image((m-min(m))/max(m-min(m)), col=colDist(29), xaxt="n", yaxt="n")
-					}
-					axis(1, at=c(0,1), labels=c(1,ncol(s2())))
-					axis(2, at=c(0,1), labels=c(nrow(s2()),1))
-					if(length(grep("similarity", input$algoritmo, ignore.case = T))>0) {
-						image.plot((m-min(m))/max(m-min(m)), col=colSim(29), xaxt="n", yaxt="n",
-									  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14),
-									  legend.lab="lesser           (Similarity)           greater")
-					} else {
-						image.plot((m-min(m))/max(m-min(m)), col=colDist(29), xaxt="n", yaxt="n",
-									  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14),
-									  legend.lab="closer              (Distance)              further")
-					}
+						# gira a imagem de saida para plotar corretamente
+						m <- t(m[nrow(m):1,])
 
-				}
+						# plota imagem para diferentes limiares
+						par(mar=c(4,2,1,1)+0.1)
+						if(length(grep("similarity", input$algoritmo, ignore.case = T))>0) {
+							image((m-min(m))/max(m-min(m)), col=colSim(29), xaxt="n", yaxt="n")
+						} else {
+							image((m-min(m))/max(m-min(m)), col=colDist(29), xaxt="n", yaxt="n")
+						}
+						axis(1, at=c(0,1), labels=c(1,ncol(s2())))
+						axis(2, at=c(0,1), labels=c(nrow(s2()),1))
+						if(length(grep("similarity", input$algoritmo, ignore.case = T))>0) {
+							image.plot((m-min(m))/max(m-min(m)), col=colSim(29), xaxt="n", yaxt="n",
+										  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14),
+										  legend.lab="lesser           (Similarity)           greater")
+						} else {
+							image.plot((m-min(m))/max(m-min(m)), col=colDist(29), xaxt="n", yaxt="n",
+										  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14),
+										  legend.lab="closer              (Distance)              further")
+						}
+
+					}
+				})
 			})
 		})
 	})
-
-
 })

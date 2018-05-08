@@ -5,7 +5,7 @@ tabPanel(
 	style = "margin-top: 71px;",
 
 	sidebarPanel(
-		id = "map-toolbar",
+		# id = "map-toolbar",
 
 		# Set up shinyjs
 		useShinyjs(),
