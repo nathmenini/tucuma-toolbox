@@ -19,6 +19,13 @@ tabPanel(
 		br(),
 		checkboxInput("raster_showMap", "Show shapefile on the map?", FALSE),
 		checkboxInput("download_SRTM", "Download SRTM data?", FALSE),
+
+		HTML("<h5><b>Choose the folder</b></h5>"),
+		shinyDirButton(id = "dir_download_raster",
+							label = "Browse...",
+							title = "Choose the folder"),
+		verbatimTextOutput("dir_download_raster_text"),
+
 		selectInput(inputId = "raster_versionLS",
 						label = "Landsat SR Version",
 						choices = list("Collection 1" = "SR_new",
@@ -27,12 +34,20 @@ tabPanel(
 		selectInput(inputId = "raster_satellite",
 						label = "Landsat Number",
 						choices = list(4, 5, 7, 8)),
-		textInput(inputId = "raster_periodStart",
-					 label = "Period start",
-					 value = "2000-01-01"),
-		textInput(inputId = "raster_periodEnd",
-					 label = "Period end",
-					 value = "2000-12-31"),
+		dateInput(
+			inputId = "raster_periodStart",
+			label = "Period start",
+			width = "100%",
+			format = "yyyy-mm-dd",
+			startview = "decade"
+		),
+		dateInput(
+			inputId = "raster_periodEnd",
+			label = "Period end",
+			width = "100%",
+			format = "yyyy-mm-dd",
+			startview = "decade"
+		),
 		bsButton(
 			inputId = "raster_botaoDownload",
 			label = "Download",

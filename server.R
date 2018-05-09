@@ -915,6 +915,29 @@ shinyServer(function(input, output, session) {
 
 # ------------------------------------------------------------- APP 2 (DOWNLOAD) ----
 
+	#### dir
+	# pixel
+	shinyDirChoose(input, 'dir_download_pixel', roots = c(home = '~'), filetypes = c(''))
+	dir <- reactive(input$dir_download_pixel)
+
+	path <- reactive({
+		home <- normalizePath("~")
+		file.path(home, paste(unlist(dir()$path[-1]), collapse = .Platform$file.sep))
+	})
+
+	output$dir_download_pixel_text <- renderText(path())
+
+	# raster
+	shinyDirChoose(input, 'dir_download_raster', roots = c(home = '~'), filetypes = c(''))
+	dir2 <- reactive(input$dir_download_raster)
+
+	path2 <- reactive({
+		home <- normalizePath("~")
+		file.path(home, paste(unlist(dir2()$path[-1]), collapse = .Platform$file.sep))
+	})
+
+	output$dir_download_raster_text <- renderText(path2())
+
 	pixel_filedata <- reactive({
 		infile <- input$pixel_datafile
 
@@ -971,7 +994,9 @@ shinyServer(function(input, output, session) {
 		})
 
 		collection <- input$pixel_versionLS
-		pathArquivo <- file.path(getwd(), paste0(input$pixel_filename, ".rds"))
+		# pathArquivo <- file.path(getwd(), paste0(input$pixel_filename, ".rds"))
+		pathArquivo <- file.path(path(), paste0(input$pixel_filename, ".rds"))
+		pathAuxPixel <- getwd()
 
 		if(collection == "new"){
 			sat <- c("LT04/C01/T1_SR", "LT05/C01/T1_SR", "LE07/C01/T1_SR", "LC08/C01/T1_SR")
@@ -1091,10 +1116,13 @@ shinyServer(function(input, output, session) {
 				}
 			})
 		}
+
+		setwd(pathAuxPixel)
+
 	})
 
 	observeEvent(input$raster_botaoDownload, {
-		workpath <- getwd()
+
 		isolate ({
 			shape <- raster_filedata()[[1]]
 		})
@@ -1105,6 +1133,10 @@ shinyServer(function(input, output, session) {
 		python.assign("satprod", input$raster_versionLS) # versao do landsat
 		python.assign("periodStart", input$raster_periodStart) # data para comecar a baixar
 		python.assign("periodEnd", input$raster_periodEnd) # data que termina de baixar
+
+		# Seta o caminho para salvar as imagens
+		pathRaster <- file.path(path2())
+		python.assign("pathRaster", pathRaster)
 
 		# Executa o script do Python
 		pathR <- getwd()
@@ -1128,7 +1160,7 @@ shinyServer(function(input, output, session) {
 
 		output$msg <- renderText({ python.get("msg") })
 
-		setwd(workpath)
+		setwd(pathR)
 
 	})
 

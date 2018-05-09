@@ -21,6 +21,7 @@ from datetime import datetime
 # os.chdir(pathPy)
 
 # count individual download times for each file
+
 start_time = time.time()
 arq = imgListNames[i]+'.zip'
 cond = os.path.exists(arq)

@@ -32,6 +32,7 @@ packs <- c(
 	"SDMTools",
 	"shiny",
 	"shinyBS",
+	"shinyFiles",
 	"shinyjs",
 	"strucchange",
 	"zoo"

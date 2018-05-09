@@ -65,6 +65,9 @@ try:
 except socket.error:
 	bnd = ee.Geometry.Rectangle(shapes[0].bbox)
 
+# entering to the user path
+os.chdir(pathRaster)
+
 # chdir to raster folder
 if(not(os.path.exists('raster'))):
 	os.mkdir('raster')
