@@ -6,6 +6,7 @@ tabPanel(
 	sidebarPanel(
 		useShinyjs(),
 		width = 3,
+		HTML("<h4><b>Retrieval:</b></h5>"),
 		selectInput("algoritmo", "Choose the distance/similarity measure:",
 						c("Manhattan Distance",
 						  "Euclidian Distance",
@@ -40,7 +41,17 @@ tabPanel(
 			hr(),
 			br(),
 			verbatimTextOutput("outputPlotClick")
-		)
+		),
+
+		br(),
+		hr(),
+		br(),
+
+		HTML("<h4><b>Clustering:</b></h5>"),
+		selectInput(inputId = "selectCluster",
+						label = "Number of clusters",
+						choices = list(2,3,4,5,6,7,8,9,10,11,12,13,14,15)),
+		actionButton("botaoCluster", "Detect clusters", width = 150, icon = icon("search", lib="font-awesome"))
 	),
 
 	mainPanel(
@@ -61,6 +72,16 @@ tabPanel(
 			width = 6,
 			h3("Output"),
 			plotOutput("plot_4a", width = 400, height = 400)
+		),
+		column(
+			width = 6,
+			h3("Elbow plot"),
+			plotOutput("plot_5", width = 400, height = 400)
+		),
+		column(
+			width = 6,
+			h3("Cluster map"),
+			plotOutput("plot_6", width = 400, height = 400)
 		)
 	)
 )

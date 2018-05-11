@@ -1,9 +1,10 @@
 library(shiny)
-source("global.R")
+source("global.R", local = TRUE)
 
 options(shiny.maxRequestSize=100*1024^2)
 
 shinyServer(function(input, output, session) {
+
 # ------------------------------------------------------------- SESSION ----
 
 	# allow reconnection by a certain grace period
@@ -1358,6 +1359,36 @@ shinyServer(function(input, output, session) {
 			  y = round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2]))
 	})
 
+	output$testeCluster <- renderPlot(distFun())
+
+	distFun <- eventReactive(input$botaoConsulta, {
+		if (input$tipo_entrada == "Specify the point (x,y)") {
+			qx <- input$x_querySlider
+			qy <- input$y_querySlider
+		} else {
+			qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
+			qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
+		}
+
+		q <- qx + ncol(s2())*(qy-1)
+
+		dist1 <- c()
+
+		if(length(qx) > 0 && length(qy) > 0) {
+			if (input$algoritmo == "DTW Distance") {
+				for (i in 1:ncell(s2())) dist1[i] <- distDTWC(v2()[q,], v2()[i,])
+			} else if (input$algoritmo == "Manhattan Distance") {
+				for (i in 1:ncell(s2())) dist1[i] <- distMinkC(v2()[q,], v2()[i,], 1)
+			} else if (input$algoritmo == "Euclidian Distance") {
+				for (i in 1:ncell(s2())) dist1[i] <- distMinkC(v2()[q,], v2()[i,], 2)
+			} else if (input$algoritmo == "Chebyshev Distance") {
+				for (i in 1:ncell(s2())) dist1[i] <- distChebC(v2()[q,], v2()[i,])
+			} else if (input$algoritmo == "Cosine Similarity") {
+				for (i in 1:ncell(s2())) dist1[i] <- simCosC(v2()[q,], v2()[i,])
+			}
+			return(dist1)
+		} else return(NULL)
+	})
 
 	observeEvent(input$botaoConsulta, {
 		output$plot_4a <- renderPlot({
@@ -1375,20 +1406,21 @@ shinyServer(function(input, output, session) {
 					q <- qx + ncol(s2())*(qy-1)
 
 					m <- matrix(0, nrow(s2()), ncol(s2()))
-					dist <- c()
+					# dist <- c()
 
 					if(length(qx) > 0 && length(qy) > 0) {
-						if (input$algoritmo == "DTW Distance") {
-							for (i in 1:ncell(s2())) dist[i] <- distDTWC(v2()[q,], v2()[i,])
-						} else if (input$algoritmo == "Manhattan Distance") {
-							for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 1)
-						} else if (input$algoritmo == "Euclidian Distance") {
-							for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 2)
-						} else if (input$algoritmo == "Chebyshev Distance") {
-							for (i in 1:ncell(s2())) dist[i] <- distChebC(v2()[q,], v2()[i,])
-						} else if (input$algoritmo == "Cosine Similarity") {
-							for (i in 1:ncell(s2())) dist[i] <- simCosC(v2()[q,], v2()[i,])
-						}
+						# if (input$algoritmo == "DTW Distance") {
+						# 	for (i in 1:ncell(s2())) dist[i] <- distDTWC(v2()[q,], v2()[i,])
+						# } else if (input$algoritmo == "Manhattan Distance") {
+						# 	for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 1)
+						# } else if (input$algoritmo == "Euclidian Distance") {
+						# 	for (i in 1:ncell(s2())) dist[i] <- distMinkC(v2()[q,], v2()[i,], 2)
+						# } else if (input$algoritmo == "Chebyshev Distance") {
+						# 	for (i in 1:ncell(s2())) dist[i] <- distChebC(v2()[q,], v2()[i,])
+						# } else if (input$algoritmo == "Cosine Similarity") {
+						# 	for (i in 1:ncell(s2())) dist[i] <- simCosC(v2()[q,], v2()[i,])
+						# }
+						dist <- distFun()
 
 						# constroi a imagem de saida
 						for(i in 1:nrow(s2())) {
@@ -1418,6 +1450,71 @@ shinyServer(function(input, output, session) {
 										  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14),
 										  legend.lab="closer              (Distance)              further")
 						}
+					}
+				})
+			})
+		})
+	})
+
+	observeEvent(input$botaoCluster, {
+		output$plot_5 <- renderPlot({
+
+			withProgress(message = 'Clustering...', value = NULL, {
+				isolate({
+					if (input$tipo_entrada == "Specify the point (x,y)") {
+						qx <- input$x_querySlider
+						qy <- input$y_querySlider
+					} else {
+						qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
+						qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
+					}
+
+					if(length(qx) > 0 && length(qy) > 0) {
+						dist1 <- distFun()
+
+						dist2 <- dist(dist1)
+
+						wss <- NULL
+						for (i in 2:15){
+							set.seed(100)
+							wss[i] <- sum(kmeans(dist1, centers=i)$withinss)
+						}
+
+						par(mar=c(4,3.5,1,1)+0.1)
+						plot(1:15, wss, type = "b", xlab="Number of Clusters",
+							  ylab="Within groups Sum of Squares")
+						points(x = input$selectCluster, y = wss[as.numeric(input$selectCluster)], col = "red", pch = 20)
+					}
+				})
+			})
+		})
+	})
+
+	observeEvent(input$botaoCluster, {
+		output$plot_6 <- renderPlot({
+
+			withProgress(message = 'Clustering...', value = NULL, {
+				isolate({
+					if (input$tipo_entrada == "Specify the point (x,y)") {
+						qx <- input$x_querySlider
+						qy <- input$y_querySlider
+					} else {
+						qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
+						qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
+					}
+
+					if(length(qx) > 0 && length(qy) > 0) {
+
+						clusters <- kmeans(distFun(), centers = input$selectCluster)
+
+						clusterRaster <- s2()[[1]]
+						values(clusterRaster) <- clusters$cluster
+
+						par(mar=c(4,2,1,1)+0.1)
+
+						image(clusterRaster, col=colSim(input$selectCluster), xaxt="n", yaxt="n", xlab="", ylab="")
+						axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
+						axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
 
 					}
 				})
