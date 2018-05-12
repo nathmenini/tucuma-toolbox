@@ -35,6 +35,7 @@ packs <- c(
 	"shinyFiles",
 	"shinyjs",
 	"strucchange",
+	"tools",
 	"zoo"
 )
 
