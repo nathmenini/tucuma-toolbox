@@ -952,14 +952,15 @@ shinyServer(function(input, output, session) {
 	raster_filedata <- reactive({
 
 		infile <- input$raster_datafile
-		infolder <- substr(infile$name, 1, nchar(infile$name) - 4)
+		infolder <- substr(infile$datapath, 1, nchar(infile$datapath) - 5)
+		nameShape <- substr(infile$name, 1, nchar(infile$name) - 4)
 
 		if (is.null(infile)) {
 			return(NULL)
 		} else {
-			unzip(infile$name, exdir = infolder)
-			shp <- shapefile(file.path(getwd(), infolder, paste0(infolder, ".shp")))
-			return(list(infolder, shp))
+			unzip(infile$datapath, exdir = infolder)
+			shp <- shapefile(file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5), paste0(nameShape, ".shp")))
+			return(list(nameShape, shp))
 		}
 	})
 
@@ -1125,15 +1126,18 @@ shinyServer(function(input, output, session) {
 	observeEvent(input$raster_botaoDownload, {
 
 		isolate ({
+			infile <- input$raster_datafile
+			shapePath <- file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5))
 			shape <- raster_filedata()[[1]]
 		})
 
 		python.assign("msg", NULL) # nome da pasta descomprimida
 		python.assign("shape", shape) # nome da pasta descomprimida
+		python.assign("shapePath", shapePath) # nome da pasta descomprimida
 		python.assign("satellite", input$raster_satellite) # numero do satelite
 		python.assign("satprod", input$raster_versionLS) # versao do landsat
-		python.assign("periodStart", input$raster_periodStart) # data para comecar a baixar
-		python.assign("periodEnd", input$raster_periodEnd) # data que termina de baixar
+		python.assign("periodStart", as.character(input$raster_periodStart)) # data para comecar a baixar
+		python.assign("periodEnd", as.character(input$raster_periodEnd)) # data que termina de baixar
 
 		# Seta o caminho para salvar as imagens
 		pathRaster <- file.path(path2())
@@ -1278,6 +1282,8 @@ shinyServer(function(input, output, session) {
 		par(mar=c(4,2,1,1)+0.1)
 		v2()
 		image(s2()[[1]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
+		image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+					  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
 	})
 
 	# Aba Visualizacao
@@ -1308,6 +1314,8 @@ shinyServer(function(input, output, session) {
 			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
 			points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=19, col="white", cex=1.5)
 			points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=21, col="black", cex=1.5)
+			image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+						  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
 		}
 	})
 
@@ -1340,6 +1348,8 @@ shinyServer(function(input, output, session) {
 			image(s2()[[input$t_querySlider]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
 			axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
 			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
+			image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+						  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
 		}
 	})
 
@@ -1351,6 +1361,8 @@ shinyServer(function(input, output, session) {
 			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
 			points(extent(s2())[1]+res(s2())[1]*input$x_querySlider, extent(s2())[4]-res(s2())[2]*input$y_querySlider, pch=19, col="white", cex=1.5)
 			points(extent(s2())[1]+res(s2())[1]*input$x_querySlider, extent(s2())[4]-res(s2())[2]*input$y_querySlider, pch=21, col="black", cex=1.5)
+			image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+						  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
 		}
 	})
 
@@ -1480,10 +1492,10 @@ shinyServer(function(input, output, session) {
 							wss[i] <- sum(kmeans(dist1, centers=i)$withinss)
 						}
 
-						par(mar=c(4,3.5,1,1)+0.1)
+						par(mar=c(4,4,2,1)+0.1)
 						plot(1:15, wss, type = "b", xlab="Number of Clusters",
 							  ylab="Within groups Sum of Squares")
-						points(x = input$selectCluster, y = wss[as.numeric(input$selectCluster)], col = "red", pch = 20)
+						points(x = input$selectCluster, y = wss[as.numeric(input$selectCluster)], col = "red", pch = 20, cex = 2)
 					}
 				})
 			})
@@ -1512,9 +1524,14 @@ shinyServer(function(input, output, session) {
 
 						par(mar=c(4,2,1,1)+0.1)
 
-						image(clusterRaster, col=colSim(input$selectCluster), xaxt="n", yaxt="n", xlab="", ylab="")
+						# colCluster <- colorRampPalette(brewer.pal(as.numeric(input$selectCluster), "Set2"))
+						# image(clusterRaster, col=colCluster(as.numeric(input$selectCluster)), xaxt="n", yaxt="n", xlab="", ylab="")
+						image(clusterRaster, col = rainbow(as.numeric(input$selectCluster)), xaxt="n", yaxt="n", xlab="", ylab="")
 						axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
 						axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
+						image.plot(clusterRaster %>% as.matrix, col = rainbow(as.numeric(input$selectCluster)), xaxt="n", yaxt="n",
+									  legend.only = T, horizontal=T, smallplot=c(.23,.79,.12,.14),
+									  legend.lab="                     (Cluster)                     ")
 
 					}
 				})

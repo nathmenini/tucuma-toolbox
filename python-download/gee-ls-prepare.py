@@ -31,6 +31,7 @@ periodStart = valid_date(periodStart)
 periodEnd = valid_date(periodEnd)
 
 shape = shape
+shapePath = shapePath
 per_start = periodStart
 per_end = periodEnd
 if(satprod == 'SR_old'):
@@ -44,7 +45,7 @@ if(satprod == 'TOA'):
 ee.Initialize()
 
 # chdir to shape folder and reads input shape
-os.chdir(shape)
+os.chdir(shapePath)
 sf = shapefile.Reader(shape)
 shapes = sf.shapes()
 shapespoints = shapes[0].points
