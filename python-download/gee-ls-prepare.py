@@ -17,8 +17,12 @@ import wget
 import zipfile
 from datetime import datetime
 
+import numpy as np
+
 def valid_date(s):
 	return datetime.strptime(s, '%Y-%m-%d')
+
+np.savetxt('/srv/shiny-server/ecological-toolbox/teste1.txt', 'teste1')
 	
 # argparse
 satsSR_old = ['LT4_SR', 'LT5_SR', 'LE7_SR', 'LC8_SR']
@@ -29,6 +33,8 @@ satsProd = ['SR_old', 'SR_new', 'TOA']
 
 periodStart = valid_date(periodStart)
 periodEnd = valid_date(periodEnd)
+
+np.savetxt('/srv/shiny-server/ecological-toolbox/teste2.txt', 'teste2')
 
 shape = shape
 shapePath = shapePath
@@ -43,6 +49,7 @@ if(satprod == 'TOA'):
 
 # earth engine init
 ee.Initialize()
+np.savetxt('/srv/shiny-server/ecological-toolbox/teste3.txt', 'teste3')
 
 # chdir to shape folder and reads input shape
 os.chdir(shapePath)
