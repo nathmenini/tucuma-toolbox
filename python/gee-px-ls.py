@@ -2,6 +2,7 @@ import ee
 import numpy
 import ssl
 from datetime import datetime
+from math import sqrt, log
 
 # earth engine API init
 ee.Initialize()
@@ -9,6 +10,20 @@ ee.Initialize()
 # convert Julian day to YYYY-MM-DD date
 def julianDayToDate(s):
 	return datetime.strptime(s, '%Y%j').strftime('%Y_%m_%d')
+
+# logaritimic protected function
+def lnProtc(x):
+	if(x == 0): return(0.0)
+	else: return(log(abs(x)))
+
+# sqrt protected function
+def sqrtProtc(x):
+	return(sqrt(abs(x)))
+
+# division protected function
+def divProtc(x,y):
+	if(y == 0): return(1)
+	else: return(x/float(y))
 
 # function to calculate and add some spectral-bands-based indexes (LS 4,5,7)
 def getVi(image):
@@ -35,6 +50,7 @@ def getVi(image):
 		.addBands(evi2.select([0],['evi2']))
 		.addBands(ndvi.select([0],['ndvi']))
 		.addBands(ndmi.select([0],['ndmi']))
+		.addBands(GPVI.select([0],['GPVI']))
 	)
 	return(image2)
 
@@ -65,6 +81,7 @@ def getVi8(image):
 		.addBands(evi2.select([0],['evi2']))
 		.addBands(ndvi.select([0],['ndvi']))
 		.addBands(ndmi.select([0],['ndmi']))
+		.addBands(GPVI.select([0],['GPVI']))
 	)
 	return(image2)
 
@@ -100,3 +117,4 @@ try:
 except ee.ee_exception.EEException:
 	# no data available
 	serie = []
+
