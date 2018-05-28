@@ -1124,6 +1124,8 @@ shinyServer(function(input, output, session) {
 			shape <- raster_filedata()[[1]]
 		})
 
+		write.table("cheguei", "teste.txt")
+
 		python.assign("msg", NULL) # msg para ser exibida ao final
 		python.assign("shape", shape) # nome do shapefile
 		python.assign("shapePath", shapePath) # path da pasta descomprimida
