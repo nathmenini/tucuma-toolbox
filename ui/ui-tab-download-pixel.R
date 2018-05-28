@@ -23,15 +23,6 @@ tabPanel(
 					 label = "Downloaded data file name",
 					 value = "downloaded-data"),
 
-		HTML("<h5><b>Choose the folder</b></h5>"),
-
-		shinyDirButton(id = "dir_download_pixel",
-							label = "Browse...",
-							title = "Choose the folder"),
-		verbatimTextOutput("dir_download_pixel_text"),
-
-		helpText("Enter the folder that your data will be downloaded."),
-		br(),
 		selectInput(inputId = "pixel_versionLS",
 						label = "Landsat SR Version",
 						choices = list("Collection 1" = "new",
@@ -42,13 +33,22 @@ tabPanel(
 			style = "primary",
 			icon = icon("download", lib = "font-awesome"),
 			width = "50%"
+		),
+		downloadButton(
+			outputId = "action_downloadDataPixel",
+			label = "Data",
+			class = "btn-primary"
 		)
 		# verbatimTextOutput("teste", placeholder = FALSE)
 	),
 
 	mainPanel(
-		leafletOutput(
-			outputId = "pixel_leaf"
+		div(
+			tags$style(type = "text/css", "#pixel_leaf {height: calc(100vh - 80px) !important;}"),
+
+			leafletOutput(
+				outputId = "pixel_leaf"
+			)
 		)
 	)
 )

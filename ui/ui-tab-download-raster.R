@@ -20,12 +20,6 @@ tabPanel(
 		checkboxInput("raster_showMap", "Show shapefile on the map?", FALSE),
 		checkboxInput("download_SRTM", "Download SRTM data?", FALSE),
 
-		HTML("<h5><b>Choose the folder</b></h5>"),
-		shinyDirButton(id = "dir_download_raster",
-							label = "Browse...",
-							title = "Choose the folder"),
-		verbatimTextOutput("dir_download_raster_text"),
-
 		selectInput(inputId = "raster_versionLS",
 						label = "Landsat SR Version",
 						choices = list("Collection 1" = "SR_new",
@@ -55,12 +49,21 @@ tabPanel(
 			icon = icon("download", lib = "font-awesome"),
 			width = "50%"
 		),
+		downloadButton(
+			outputId = "action_downloadDataRaster",
+			label = "Data",
+			class = "btn-primary"
+		),
 		textOutput("msg")
 	),
 
 	mainPanel(
-		leafletOutput(
-			outputId = "raster_leaf"
+		div(
+			tags$style(type = "text/css", "#raster_leaf {height: calc(100vh - 80px) !important;}"),
+
+			leafletOutput(
+				outputId = "raster_leaf"
+			)
 		)
 	)
 )

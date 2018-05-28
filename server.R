@@ -916,29 +916,6 @@ shinyServer(function(input, output, session) {
 
 # ------------------------------------------------------------- APP 2 (DOWNLOAD) ----
 
-	#### dir
-	# pixel
-	shinyDirChoose(input, 'dir_download_pixel', roots = c(home = '~'), filetypes = c(''))
-	dir <- reactive(input$dir_download_pixel)
-
-	path <- reactive({
-		home <- normalizePath("~")
-		file.path(home, paste(unlist(dir()$path[-1]), collapse = .Platform$file.sep))
-	})
-
-	output$dir_download_pixel_text <- renderText(path())
-
-	# raster
-	shinyDirChoose(input, 'dir_download_raster', roots = c(home = '~'), filetypes = c(''))
-	dir2 <- reactive(input$dir_download_raster)
-
-	path2 <- reactive({
-		home <- normalizePath("~")
-		file.path(home, paste(unlist(dir2()$path[-1]), collapse = .Platform$file.sep))
-	})
-
-	output$dir_download_raster_text <- renderText(path2())
-
 	pixel_filedata <- reactive({
 		infile <- input$pixel_datafile
 
@@ -977,6 +954,13 @@ shinyServer(function(input, output, session) {
 		)
 	})
 
+	observeEvent(input$pixel_botaoDownload, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "action_downloadDataPixel",
+			condition = input$pixel_botaoDownload > 0,
+			selector = NULL)
+	})
+
 	observeEvent(input$raster_datafile, ignoreNULL = F, {
 		shinyjs::toggleState(
 			id = "raster_botaoDownload",
@@ -987,8 +971,17 @@ shinyServer(function(input, output, session) {
 			id = "raster_showMap",
 			condition = !is.null(input$raster_datafile)
 		)
+
 	})
 
+	observeEvent(input$raster_botaoDownload, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "action_downloadDataRaster",
+			condition = input$raster_botaoDownload > 0,
+			selector = NULL)
+	})
+
+	# Download pixel
 	observeEvent(input$pixel_botaoDownload, {
 
 		isolate ({
@@ -996,8 +989,6 @@ shinyServer(function(input, output, session) {
 		})
 
 		collection <- input$pixel_versionLS
-		# pathArquivo <- file.path(getwd(), paste0(input$pixel_filename, ".rds"))
-		pathArquivo <- file.path(path(), paste0(input$pixel_filename, ".rds"))
 		pathAuxPixel <- getwd()
 
 		if(collection == "new"){
@@ -1006,18 +997,14 @@ shinyServer(function(input, output, session) {
 			sat <- c("LT4_SR", "LT5_SR","LE7_SR", "LC8_SR")
 		}
 
-		if(file.exists(pathArquivo)) {
-			serieList <- readRDS(pathArquivo)
-			startJ <- (serieList %>% length) + 1
-		} else {
-			serieList <- list()
-			startJ <- 1
-		}
+		serieListPixel <<- list()
+		startJ <- 1
 
 		if(startJ <= nrow(dfCoords)) {
 			withProgress(message = 'Downloading', value = 0, {
 				for(j in startJ:nrow(dfCoords)) {
 					setProgress(j / nrow(dfCoords), detail = paste0(j, "/", nrow(dfCoords)))
+
 					# Ponto para ser baixado
 					lat <- dfCoords$lat[j]
 					lng <- dfCoords$long[j]
@@ -1085,8 +1072,6 @@ shinyServer(function(input, output, session) {
 						python.assign("values", NULL)
 						python.assign("numCol", NULL)
 						python.assign("colNames", NULL)
-
-						# cat(paste(sat[i], "baixado\n"))
 					}
 
 					if(collection == "new" & df %>% is.null %>% not) {
@@ -1111,9 +1096,7 @@ shinyServer(function(input, output, session) {
 						df[sat == "LT8_SR", sat := "LSR8"]
 					}
 
-					serieList[[j]] <- df
-
-					saveRDS(serieList, pathArquivo)
+					serieListPixel[[j]] <<- df
 
 				}
 			})
@@ -1123,6 +1106,16 @@ shinyServer(function(input, output, session) {
 
 	})
 
+	# Salvando dados de Pixel
+	output$action_downloadDataPixel <- downloadHandler(
+		filename = paste0(input$pixel_filename, ".rds"),
+		content = {function(file) {
+				saveRDS(object = serieListPixel, file = file)
+			}
+		}
+	)
+
+	# Download raster
 	observeEvent(input$raster_botaoDownload, {
 
 		isolate ({
@@ -1131,17 +1124,20 @@ shinyServer(function(input, output, session) {
 			shape <- raster_filedata()[[1]]
 		})
 
-		python.assign("msg", NULL) # nome da pasta descomprimida
-		python.assign("shape", shape) # nome da pasta descomprimida
-		python.assign("shapePath", shapePath) # nome da pasta descomprimida
+		python.assign("msg", NULL) # msg para ser exibida ao final
+		python.assign("shape", shape) # nome do shapefile
+		python.assign("shapePath", shapePath) # path da pasta descomprimida
 		python.assign("satellite", input$raster_satellite) # numero do satelite
 		python.assign("satprod", input$raster_versionLS) # versao do landsat
 		python.assign("periodStart", as.character(input$raster_periodStart)) # data para comecar a baixar
 		python.assign("periodEnd", as.character(input$raster_periodEnd)) # data que termina de baixar
 
 		# Seta o caminho para salvar as imagens
-		pathRaster <- file.path(path2())
+
+		pathRaster <- file.path(tempdir())
 		python.assign("pathRaster", pathRaster)
+
+		print(pathRaster)
 
 		# Executa o script do Python
 		pathR <- getwd()
@@ -1169,64 +1165,107 @@ shinyServer(function(input, output, session) {
 
 	})
 
+	# Salvando dados de Raster
+	output$action_downloadDataRaster <- downloadHandler(
+		filename = paste0("images-downloaded", ".zip"),
+		content = {function(file) {
+				pathAux <- getwd()
+				setwd(file.path(tempdir(), "raster"))
+				zip(zipfile = file, files = isolate ({
+					shape <- raster_filedata()[[1]]
+				}))
+				setwd(pathAux)
+			}
+		}
+	)
+
+	# Plotting
 	output$pixel_leaf <- renderLeaflet({
 
 		m3 <- leaflet(options = list(attributionControl = F))
 		m3 <- addTiles(map = m3,
-						  urlTemplate = "http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-						  attribution = "Imagery &copy;2016 TerraMetrics",
-						  options = list(maxZoom = 20, noWrap = T, subdomains = c('mt0','mt1','mt2','mt3')))
+							urlTemplate = "http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+							attribution = "Imagery &copy;2016 TerraMetrics",
+							options = list(minZoom = 1,
+												maxZoom = 16,
+												noWrap = T,
+												subdomains = c('mt0','mt1','mt2','mt3')))
 		m3 <- setMaxBounds(m3, -180, -90, 180, 90)
+
+		m3 <- setView(m3, lng = 22.909114, lat = -25.618960, zoom = 2)
+		m3
+	})
+
+	observe({
+
+		leafletProxy("pixel_leaf") %>%
+			clearMarkers() %>%
+			clearMarkerClusters()
 
 		if(input$pixel_showMap){
 
 			dfCoords <- pixel_filedata()
 
-
-			for(i in 1:nrow(dfCoords)){
-				center <- SpatialPoints(coords = data.frame(dfCoords$long[i], dfCoords$lat[i]),
-												proj4string = CRS(proj_ll))
-				proj_utm_def <- proj_utm(center)
-				center <- spTransform(center, CRS(proj_utm_def))
-
-				xm <- extent(center)[1] # lon
-				ym <- extent(center)[3] # lat
-
-				size <- 30
-				xypoly <- data.frame(x = c(xm-size/2, xm+size/2, xm+size/2, xm-size/2),
-											y = c(ym-size/2, ym-size/2, ym+size/2, ym+size/2))
-
-				outShape <- SpatialPolygons(list(Polygons(list(Polygon(xypoly)),1)),
-													 proj4string = CRS(proj_utm_def))
-				outShape <- spTransform(outShape, CRS(proj_ll))
-				outShape <- SpatialPolygonsDataFrame(outShape, data.frame("ID"=0))
-
-				m3 <- addPolygons(m3, data = outShape, color = "red", opacity=1, fillOpacity=0)
-			}
-			m3
+			leafletProxy("pixel_leaf") %>%
+				addAwesomeMarkers(lng = dfCoords$long,
+										lat = dfCoords$lat,
+										label = dfCoords[,1] %>% as.character,
+										icon = makeAwesomeIcon(
+											icon = "circle",
+											markerColor = "blue",
+											iconColor = "#FFFFFF",
+											library = "fa"
+										),
+										clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>%
+				flyTo(lat = mean(dfCoords$lat),
+						lng = mean(dfCoords$long),
+						zoom = 5,
+						options = list(animate = FALSE))
 		} else {
-			m3 <- setView(m3, lat = 0, lng = 0, zoom = 1)
-			m3
+			leafletProxy("pixel_leaf") %>% setView(lng = 0,
+																lat = 0,
+																zoom = 1)
 		}
 	})
 
 	output$raster_leaf <- renderLeaflet({
-		shp <- raster_filedata()[[2]]
 
 		m2 <- leaflet(options = list(attributionControl = F))
 		m2 <- addTiles(map = m2,
 							urlTemplate = "http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
 							attribution = "Imagery &copy;2016 TerraMetrics",
-							options = list(maxZoom = 20, noWrap = T, subdomains = c('mt0','mt1','mt2','mt3')))
+							options = list(minZoom = 1,
+												maxZoom = 16,
+												noWrap = T,
+												subdomains = c('mt0','mt1','mt2','mt3')))
 
 		m2 <- setMaxBounds(m2, -180, -90, 180, 90)
 
+		m2 <- setView(m2, lng = 22.909114, lat = -25.618960, zoom = 2)
+
+		m2
+	})
+
+	observe({
+
+
+		leafletProxy("raster_leaf") %>%
+			clearShapes()
+
 		if(input$raster_showMap){
-			m2 <- addPolygons(m2, data = shp, color = "white", opacity=1, fillOpacity=0)
-			m2
+			shp <- raster_filedata()[[2]]
+
+			extetentShape <- shp %>% extent
+
+			leafletProxy("raster_leaf") %>% addPolygons(data = shp, color = "white", opacity=1, fillOpacity=0) %>%
+				flyTo(lat = extetentShape[3] + (extetentShape[4]-extetentShape[3])/2,
+						lng = extetentShape[1] + (extetentShape[2]-extetentShape[1])/2,
+						zoom = 10,
+						options = list(animate = FALSE))
 		} else {
-			m2 <- setView(m2, lat = 0, lng = 0, zoom = 1)
-			m2
+			leafletProxy("raster_leaf") %>% setView(lng = 0,
+																 lat = 0,
+																 zoom = 1)
 		}
 	})
 
