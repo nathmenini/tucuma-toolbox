@@ -6,6 +6,9 @@
 #	- Output is a .zip containing .tif images for every band
 # ------------------------------------------------------------------------------------
 
+import numpy as np
+np.savetxt('/srv/shiny-server/ecological-toolbox/teste1.txt', np.array((1,1)))
+
 import argparse
 import ee
 import os
@@ -16,9 +19,6 @@ import time
 import wget
 import zipfile
 from datetime import datetime
-
-import numpy as np
-np.savetxt('/srv/shiny-server/ecological-toolbox/teste1.txt', np.array((1,1)))
 
 def valid_date(s):
 	return datetime.strptime(s, '%Y-%m-%d')
