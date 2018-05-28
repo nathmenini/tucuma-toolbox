@@ -6,9 +6,6 @@
 #	- Output is a .zip containing .tif images for every band
 # ------------------------------------------------------------------------------------
 
-import numpy as np
-np.savetxt('/srv/shiny-server/ecological-toolbox/teste1.txt', np.array((1,1)))
-
 import argparse
 import ee
 import os
@@ -33,8 +30,6 @@ satsProd = ['SR_old', 'SR_new', 'TOA']
 periodStart = valid_date(periodStart)
 periodEnd = valid_date(periodEnd)
 
-np.savetxt('/srv/shiny-server/ecological-toolbox/teste2.txt', np.array((2,2)))
-
 shape = shape
 shapePath = shapePath
 per_start = periodStart
@@ -48,7 +43,6 @@ if(satprod == 'TOA'):
 
 # earth engine init
 ee.Initialize()
-np.savetxt('/srv/shiny-server/ecological-toolbox/teste3.txt', np.array((3,3)))
 
 # chdir to shape folder and reads input shape
 os.chdir(shapePath)
