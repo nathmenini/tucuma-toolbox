@@ -1139,8 +1139,8 @@ shinyServer(function(input, output, session) {
 
 		# Executa o script do Python
 		pathR <- getwd()
-		write.table("cheguei", "teste.txt")
 		python.load(file.path("python-download/gee-ls-prepare.py"))
+		write.table("cheguei", "teste.txt")
 
 		# Pega o numero de imagens para serem baixadas
 		nRaster <- python.get("imgColLen")
