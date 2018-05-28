@@ -16,6 +16,9 @@ import time
 import wget
 import zipfile
 from datetime import datetime
+import numpy as np
+
+np.savetxt('/srv/shiny-server/ecological-toolbox/teste1.txt', np.array((1,1)))
 
 def valid_date(s):
 	return datetime.strptime(s, '%Y-%m-%d')
@@ -43,6 +46,7 @@ if(satprod == 'TOA'):
 
 # earth engine init
 ee.Initialize()
+np.savetxt('/srv/shiny-server/ecological-toolbox/teste3.txt', np.array((3,3)))
 
 # chdir to shape folder and reads input shape
 os.chdir(shapePath)
