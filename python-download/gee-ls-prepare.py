@@ -196,7 +196,12 @@ else:
 	)
 
 # quantity of images in imgCol
-imgColLen = imgCol.size().getInfo()
+try:
+	imgColLen = imgCol.size().getInfo()
+except:
+	text_file = open("Output.txt", "w")
+	text_file.write(ee.ee_exception.EEException)
+	text_file.close()
 
 # if no image is available, warns the user and exits
 if(imgColLen == 0):
