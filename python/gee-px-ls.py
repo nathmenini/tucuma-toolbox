@@ -50,7 +50,6 @@ def getVi(image):
 		.addBands(evi2.select([0],['evi2']))
 		.addBands(ndvi.select([0],['ndvi']))
 		.addBands(ndmi.select([0],['ndmi']))
-		.addBands(GPVI.select([0],['GPVI']))
 	)
 	return(image2)
 
@@ -81,7 +80,6 @@ def getVi8(image):
 		.addBands(evi2.select([0],['evi2']))
 		.addBands(ndvi.select([0],['ndvi']))
 		.addBands(ndmi.select([0],['ndmi']))
-		.addBands(GPVI.select([0],['GPVI']))
 	)
 	return(image2)
 
