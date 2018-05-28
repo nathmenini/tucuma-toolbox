@@ -1134,13 +1134,12 @@ shinyServer(function(input, output, session) {
 
 		# Seta o caminho para salvar as imagens
 
-		write.table("cheguei", "teste.txt")
-
 		pathRaster <- file.path(tempdir())
 		python.assign("pathRaster", pathRaster)
 
 		# Executa o script do Python
 		pathR <- getwd()
+		write.table("cheguei", "teste.txt")
 		python.load(file.path("python-download/gee-ls-prepare.py"))
 
 		# Pega o numero de imagens para serem baixadas
