@@ -1137,8 +1137,6 @@ shinyServer(function(input, output, session) {
 		pathRaster <- file.path(tempdir())
 		python.assign("pathRaster", pathRaster)
 
-		print(pathRaster)
-
 		# Executa o script do Python
 		pathR <- getwd()
 		python.load(file.path("python-download/gee-ls-prepare.py"))
