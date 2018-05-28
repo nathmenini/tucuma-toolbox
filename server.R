@@ -1124,8 +1124,6 @@ shinyServer(function(input, output, session) {
 			shape <- raster_filedata()[[1]]
 		})
 
-		write.table("cheguei", "teste.txt")
-
 		python.assign("msg", NULL) # msg para ser exibida ao final
 		python.assign("shape", shape) # nome do shapefile
 		python.assign("shapePath", shapePath) # path da pasta descomprimida
@@ -1135,6 +1133,8 @@ shinyServer(function(input, output, session) {
 		python.assign("periodEnd", as.character(input$raster_periodEnd)) # data que termina de baixar
 
 		# Seta o caminho para salvar as imagens
+
+		write.table("cheguei", "teste.txt")
 
 		pathRaster <- file.path(tempdir())
 		python.assign("pathRaster", pathRaster)
