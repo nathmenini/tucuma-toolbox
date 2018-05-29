@@ -20,13 +20,6 @@ import numpy as np
 
 def valid_date(s):
 	return datetime.strptime(s, '%Y-%m-%d')
-
-from google.appengine.api import urlfetch
-urlfetch.set_default_fetch_deadline(60)
-text_file = open("Output.txt", "w")
-text_file.write("cheguei!!")
-text_file.close()
-
 	
 # argparse
 satsSR_old = ['LT4_SR', 'LT5_SR', 'LE7_SR', 'LC8_SR']
