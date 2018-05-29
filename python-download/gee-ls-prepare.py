@@ -20,6 +20,9 @@ import numpy as np
 
 def valid_date(s):
 	return datetime.strptime(s, '%Y-%m-%d')
+
+from google.appengine.api import urlfetch
+urlfetch.set_default_fetch_deadline(60)
 	
 # argparse
 satsSR_old = ['LT4_SR', 'LT5_SR', 'LE7_SR', 'LC8_SR']
@@ -196,12 +199,7 @@ else:
 	)
 
 # quantity of images in imgCol
-try:
-	imgColLen = imgCol.size().getInfo()
-except:
-	text_file = open("Output.txt", "w")
-	text_file.write(ee.ee_exception.EEException)
-	text_file.close()
+imgColLen = imgCol.size().getInfo()
 
 # if no image is available, warns the user and exits
 if(imgColLen == 0):
