@@ -997,8 +997,15 @@ shinyServer(function(input, output, session) {
 			sat <- c("LT4_SR", "LT5_SR","LE7_SR", "LC8_SR")
 		}
 
-		serieListPixel <<- list()
-		startJ <- 1
+
+		filesInTheFolder <- list.files()
+		if(paste0(input$pixel_filename, ".rds") %in% filesInTheFolder) {
+			serieListPixel <<- readRDS(paste0(input$pixel_filename, ".rds"))
+			startJ <- (serieListPixel %>% length()) + 1
+		} else {
+			serieListPixel <<- list()
+			startJ <- 1
+		}
 
 		if(startJ <= nrow(dfCoords)) {
 			withProgress(message = 'Downloading', value = 0, {
@@ -1098,6 +1105,8 @@ shinyServer(function(input, output, session) {
 
 					serieListPixel[[j]] <<- df
 
+					saveRDS(serieListPixel, paste0(input$pixel_filename, ".rds"))
+
 				}
 			})
 		}
@@ -1106,14 +1115,14 @@ shinyServer(function(input, output, session) {
 
 	})
 
-	# Salvando dados de Pixel
-	output$action_downloadDataPixel <- downloadHandler(
-		filename = paste0(input$pixel_filename, ".rds"),
-		content = {function(file) {
-				saveRDS(object = serieListPixel, file = file)
-			}
-		}
-	)
+	# # Salvando dados de Pixel
+	# output$action_downloadDataPixel <- downloadHandler(
+	# 	filename = paste0(input$pixel_filename, ".rds"),
+	# 	content = {function(file) {
+	# 			saveRDS(object = serieListPixel, file = file)
+	# 		}
+	# 	}
+	# )
 
 	# Download raster
 	observeEvent(input$raster_botaoDownload, {
@@ -1149,7 +1158,7 @@ shinyServer(function(input, output, session) {
 				for(i in 0:(nRaster-1)) {
 					setProgress((i+1) / nRaster, detail = paste0((i+1), "/", nRaster))
 					python.assign("i", i) # atualizada o valor de i do loop
-					python.load(file.path(pathR,"python-download/download-raster-ls.py"))
+					python.load(file.path(pathR, "python-download/download-raster-ls.py"))
 				}
 			})
 			if(input$download_SRTM) {
@@ -1204,21 +1213,40 @@ shinyServer(function(input, output, session) {
 
 			dfCoords <- pixel_filedata()
 
-			leafletProxy("pixel_leaf") %>%
-				addAwesomeMarkers(lng = dfCoords$long,
-										lat = dfCoords$lat,
-										label = dfCoords[,1] %>% as.character,
-										icon = makeAwesomeIcon(
-											icon = "circle",
-											markerColor = "blue",
-											iconColor = "#FFFFFF",
-											library = "fa"
-										),
-										clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>%
-				flyTo(lat = mean(dfCoords$lat),
-						lng = mean(dfCoords$long),
-						zoom = 5,
-						options = list(animate = FALSE))
+			if(input$pixel_cluster | (length(dfCoords$long) > 1000)) {
+				leafletProxy("pixel_leaf") %>%
+					addAwesomeMarkers(lng = dfCoords$long,
+											lat = dfCoords$lat,
+											label = dfCoords[,1] %>% as.character,
+											icon = makeAwesomeIcon(
+												icon = "circle",
+												markerColor = "blue",
+												iconColor = "#FFFFFF",
+												library = "fa"
+											),
+											clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>%
+					flyTo(lat = mean(dfCoords$lat),
+							lng = mean(dfCoords$long),
+							zoom = 5,
+							options = list(animate = FALSE))
+			} else {
+				leafletProxy("pixel_leaf") %>%
+					addAwesomeMarkers(lng = dfCoords$long,
+											lat = dfCoords$lat,
+											label = dfCoords[,1] %>% as.character,
+											icon = makeAwesomeIcon(
+												icon = "circle",
+												markerColor = "blue",
+												iconColor = "#FFFFFF",
+												library = "fa"
+											)) %>%
+					flyTo(lat = mean(dfCoords$lat),
+							lng = mean(dfCoords$long),
+							zoom = 5,
+							options = list(animate = FALSE))
+			}
+
+
 		} else {
 			leafletProxy("pixel_leaf") %>% setView(lng = 0,
 																lat = 0,

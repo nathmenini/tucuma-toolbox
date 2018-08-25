@@ -16,6 +16,7 @@ tabPanel(
 		helpText("The input data must be a .csv file, with comma sep. There must be three columns: plot (id), lat (latitude) and long (longitude)."),
 
 		checkboxInput("pixel_showMap", "Show points on the map?", FALSE),
+		checkboxInput("pixel_cluster", "Group points?", FALSE),
 
 		br(),
 
@@ -33,12 +34,12 @@ tabPanel(
 			style = "primary",
 			icon = icon("download", lib = "font-awesome"),
 			width = "50%"
-		),
-		downloadButton(
-			outputId = "action_downloadDataPixel",
-			label = "Data",
-			class = "btn-primary"
-		)
+		)#,
+		# downloadButton(
+		# 	outputId = "action_downloadDataPixel",
+		# 	label = "Data",
+		# 	class = "btn-primary"
+		# )
 		# verbatimTextOutput("teste", placeholder = FALSE)
 	),
 

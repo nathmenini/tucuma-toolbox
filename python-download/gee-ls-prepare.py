@@ -35,6 +35,7 @@ shape = shape
 shapePath = shapePath
 per_start = periodStart
 per_end = periodEnd
+
 if(satprod == 'SR_old'):
 	sat = satsSR_old[satsNames.index(satellite)]
 if(satprod == 'SR_new'):
