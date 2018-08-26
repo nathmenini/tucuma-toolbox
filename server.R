@@ -1105,7 +1105,9 @@ shinyServer(function(input, output, session) {
 
 					serieListPixel[[j]] <<- df
 
-					saveRDS(serieListPixel, paste0(input$pixel_filename, ".rds"))
+					if((j %% 100 == 0) | (j == nrow(dfCoords))) {
+						saveRDS(serieListPixel, paste0(input$pixel_filename, ".rds"))
+					}
 
 				}
 			})
