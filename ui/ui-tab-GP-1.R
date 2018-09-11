@@ -38,7 +38,7 @@ tabPanel(
 
 		hr(),
 
-		radioButtons("entrada_bfastOut", "Do you already have the OutputData?",
+		radioButtons("entrada_bfastOut", "Do you already have the pre-processed data?",
 						 c("Yes",
 						   "No")
 		),

@@ -2115,7 +2115,7 @@ shinyServer(function(input, output, session) {
 
 			extetentShape <- shp %>% extent
 
-			leafletProxy("leafGPClassifier") %>% addPolygons(data = shp, color = "white", opacity=1, fillOpacity=0) %>%
+			leafletProxy("leafGPClassifier") %>% addPolygons(data = shp, color = "yellow", opacity = 1, fillOpacity = 0, weight = 2) %>%
 				flyTo(lat = extetentShape[3] + (extetentShape[4]-extetentShape[3])/2,
 						lng = extetentShape[1] + (extetentShape[2]-extetentShape[1])/2,
 						zoom = 10,
@@ -2157,8 +2157,8 @@ shinyServer(function(input, output, session) {
 		})
 		resMean <- c(rowMeans(decAcc), rowMeans(rawAcc), rowMeans(baseAcc))
 		resSd <- c(apply(decAcc, MARGIN = 1, sd), apply(rawAcc, MARGIN = 1, sd), apply(baseAcc, MARGIN = 1, sd))
-		resMean[1:4] <- c(0.959, 0.958, 0.957, 0.958)
-		resSd[1:4] <- c(0.003, 0.004, 0.002, 0.004)
+		# resMean[1:4] <- c(0.959, 0.958, 0.957, 0.958)
+		# resSd[1:4] <- c(0.003, 0.004, 0.002, 0.004)
 		out[[j]] <- paste(sprintf("%.3f", round(resMean, 3)), "+-", sprintf("%.3f", round(resSd, 3)))
 		out[[j]] <- out[[j]] %>% cbind()
 

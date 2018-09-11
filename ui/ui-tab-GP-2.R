@@ -38,7 +38,7 @@ tabPanel(
 		),
 		column(
 			width = 6,
-			h3("Syntex Tree"),
+			h3("Syntax Tree"),
 			plotOutput("plotTree", width = 400, height = 400)
 		)
 	)
