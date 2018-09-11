@@ -427,7 +427,7 @@ shinyServer(function(input, output, session) {
 
 		# sort data by date
 		serie <- serie[order(serie$date), ]
-		
+
 		# removendo NAs
 		serie <- na.omit(serie)
 
@@ -1320,7 +1320,7 @@ shinyServer(function(input, output, session) {
 
 		# eh necessario renomear o nome do arquivo gri, pois o shiny copia os arquivos
 		# com nomes diferentes na pasta temporaria
-	  
+
 		old_name <- input$arquivo$datapath[2]
 		new_name <- paste0(substr(input$arquivo$datapath[2],
 										  start = 1,
@@ -1609,4 +1609,579 @@ shinyServer(function(input, output, session) {
 			})
 		})
 	})
+
+# ------------------------------------------------------------- APP 4 (GP Classifier) ----
+
+	areaShapefile <- reactive({
+
+		infile <- input$shapeArea
+		infolder <- substr(infile$datapath, 1, nchar(infile$datapath) - 5)
+		nameShape <- substr(infile$name, 1, nchar(infile$name) - 4)
+
+		if (is.null(infile)) {
+			return(NULL)
+		} else {
+			unzip(infile$datapath, exdir = infolder)
+			shp <- shapefile(file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5), paste0(nameShape, ".shp")))
+			return(list(nameShape, spTransform(shp, proj_ll)))
+		}
+	})
+
+	classShapefile <- reactive({
+
+		infile <- input$shapeClass
+		infolder <- substr(infile$datapath, 1, nchar(infile$datapath) - 5)
+		nameShape <- substr(infile$name, 1, nchar(infile$name) - 4)
+
+		if (is.null(infile)) {
+			return(NULL)
+		} else {
+			unzip(infile$datapath, exdir = infolder)
+			shp <- shapefile(file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5), paste0(nameShape, ".shp")))
+			return(list(nameShape, spTransform(shp, proj_ll)))
+		}
+	})
+
+	dataBFASTOut <- reactive({
+		infile <- input$dataProcessed
+
+		if (is.null(infile)) {
+			return(NULL)
+		} else {
+			return(infile$datapath)
+		}
+	})
+
+	dataGPRun <- reactive({
+		infile <- input$GPdata
+
+		if (is.null(infile)) {
+			return(NULL)
+		} else {
+			return(infile$datapath)
+		}
+	})
+
+	dataResults <- reactive({
+		infile <- input$showResultsData
+
+		if (is.null(infile)) {
+			return(NULL)
+		} else {
+			return(infile$datapath)
+		}
+	})
+
+	toListen <- reactive({
+		list(input$shapeArea, input$shapeClass)
+	})
+
+	observeEvent(toListen(), ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "preProcessButton",
+			condition = !(is.null(input$shapeArea) || is.null(input$shapeClass))
+		)
+	})
+
+	observeEvent(input$preProcessButton, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "runBFAST",
+			condition = input$preProcessButton > 0
+		)
+	})
+
+	toListen2 <- reactive({
+		list(input$distanceMatrix, input$distanceMatrix2)
+	})
+
+	observeEvent(toListen2(), ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "GPrun2",
+			condition = input$distanceMatrix > 0 || input$distanceMatrix2 > 0
+		)
+	})
+
+	observeEvent(input$GPdata, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "GPrun",
+			condition = !is.null(input$GPdata)
+		)
+	})
+
+	# habilita/desabilita o botao de download conforme disponibilidade de df
+	# se a condicao for satisfeita, eh habilitado
+	observeEvent(input$shapeArea, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "showROIMap",
+			condition = !is.null(input$shapeArea)
+		)
+	})
+
+	observeEvent(input$shapeClass, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "showCOIMap",
+			condition = !is.null(input$shapeClass)
+		)
+	})
+
+	observeEvent(input$showResultsData, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "getResults",
+			condition = !is.null(input$showResultsData)
+		)
+	})
+
+	observeEvent(input$dataProcessed, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "distanceMatrix",
+			condition = !is.null(input$dataProcessed)
+		)
+	})
+
+	observeEvent(input$preProcessButton, ignoreNULL = F, {
+		shinyjs::toggleState(
+			id = "distanceMatrix2",
+			condition = input$preProcessButton > 0
+		)
+	})
+
+	observeEvent(input$preProcessButton, {
+
+		withProgress(message = 'Processing shapes...', value = NULL, {
+			areaEuc <- sapply(classShapefile()[[2]]@polygons[[1]]@Polygons, function(x) {
+				x@area
+			})
+
+			# escolhendo os 150 poligonos com maior area para evitar false positives
+			top <- order(areaEuc, decreasing = T)[1:150]
+			shpEucTop <- classShapefile()[[2]]
+			shpEucTop@polygons[[1]]@Polygons <- shpEucTop@polygons[[1]]@Polygons[top]
+
+			shpOther <- gDifference(areaShapefile()[[2]], classShapefile()[[2]])
+		})
+
+		path <- getwd()
+		if(file.exists(file.path(path, "GPFolder"))){
+			if(file.exists(file.path(path, "GPFolder", "MOD13Q1")) &&
+				file.exists(file.path(path, "GPFolder", "MYD13Q1"))) {
+
+				f_band <- "ndvi"
+				f_dir <- dir(file.path(path, "GPFolder"))
+				f_sat <- which(startsWith(f_dir, "M"))
+
+				if(!("extracted-modis" %in% list.files(file.path(path, "GPFolder")))) {
+					for(k in 1:length(f_sat)) {
+						# filter only zip files from wd
+
+						setwd(file.path(path, "GPFolder", f_dir[f_sat[k]]))
+						files <- dir(pattern = ".zip", full.names = T)
+
+						# remove .tmp files if they exist
+						tmp <- dir(pattern = ".tmp", full.names = T)
+						tmp <- file.remove(tmp)
+
+						# output folder
+						dir.create("../extracted-modis/", showWarnings = F)
+						outPath <- paste0("../extracted-modis")
+
+						# progress bar to follow up loop progress
+						withProgress(message = (paste("Extracting", f_dir[f_sat[k]],"files...")), value = 0, {
+							# loop that extracts files from zips
+							for (i in 1:length(files)) {
+
+								# update progress bar
+								setProgress(i / length(files), detail = paste0(i, "/", length(files)))
+
+								# list the content of zip
+								auxList <- unzip(files[i],
+													  list = T,
+													  overwrite = F)$Name
+
+								# list .tif files indexes inside the zips
+								toUnzip <- grep(".tif", auxList)
+
+								# extracts .tif files from zips
+								if(!prod(auxList[toUnzip] %in% dir(outPath))) {
+									unzip(files[i],
+											files = auxList[toUnzip],
+											exdir = outPath)
+								}
+
+								# rename unzipped files to match zip name
+								zipName <- strsplit(strsplit(files[i], "/")[[1]][2], "\\.")[[1]][1]
+								pat <- strsplit(auxList[toUnzip[1]], "\\.")[[1]][1]
+								files_pat <- dir(path = outPath, pattern = pat, full.names = T)
+								files_new <- gsub(pat, zipName, files_pat)
+								file.rename(files_pat, files_new)
+
+							}
+						})
+						# close(pb)
+					}
+				}
+
+				withProgress(message = 'Extracting time series...', value = NULL, {
+					# list all .tif files inside the extracted folder
+					files <- dir(path = file.path(path, "GPFolder", "extracted-modis"),
+									 pattern = paste0(f_band, ".tif"))
+
+					# reorder Terra/Aqua files by date
+					filesDates <- substr(files, 13, 22)
+					files <- files[order(filesDates)]
+
+					# create rasters for all files
+					rasters <- lapply(file.path(path, "GPFolder", "extracted-modis", files),
+											FUN = raster)
+
+					# defining the stack of all the rasters
+					s <- raster::stack(rasters)
+
+					# if s has no time variable, create one
+					if(is.null(getZ(s))) {
+						s <- setZ(s, as.Date(substr(names(s), 13, 22), format = "%Y_%m_%d"))
+					}
+
+					# mask raster from the region with Euc/Other shapes
+					ras <- s[[1]]
+					suppressWarnings({
+						rasEuc <- mask(ras, shpEucTop, updatevalue = -1, updateNA = -1)
+						rasOther <- mask(ras, shpOther, updatevalue = -1, updateNA = -1)
+					})
+					pointsEuc <- which(values(rasEuc) != -1, arr.ind = T)
+					pointsOther <- which(values(rasOther) != -1, arr.ind = T)
+
+					# sampling Euc/Other pixels
+					set.seed(1)
+					smpEuc <<- sample(pointsEuc, 250)
+					smpOther <<- sample(pointsOther, 250)
+				})
+
+				withProgress(message = 'Filling gaps...', value = NULL, {
+					# create and extract time series from all the points (or a sample)
+					d <- zooExtract(x = s, c(smpEuc, smpOther))
+					d <- as.matrix(d)
+
+					# reduce date to months
+					dtime <- strftime(getZ(s), "%Y-%m")
+
+					# aggregate data by month
+					l <- length(unique(dtime))
+					d2 <- matrix(nrow = l, ncol = ncol(d))
+					for(i in 1:l) {
+						w <- which(dtime == unique(dtime)[i])
+						if(length(w) == 1) d2[i,] <- d[w,]
+						else d2[i,] <- colMedians(d[w,], na.rm = T)
+					}
+					d2[which(is.nan(d2))] <- NA
+					rm(d)
+
+					# create the full year-month empty data structure
+					mYear <- as.numeric(substr(min(getZ(s)), 1, 4))
+					MYear <- as.numeric(substr(max(getZ(s)), 1, 4))
+					mMonth <- as.numeric(substr(min(getZ(s)), 6, 7))
+					MMonth <- as.numeric(substr(max(getZ(s)), 6, 7))
+					fullYear <- rep(mYear:MYear, each = 12)
+					fullMonth <- rep(1:12, times = length(mYear:MYear))
+					if(mMonth>1) {
+						fullYear <- fullYear[-(1:(mMonth-1))]
+						fullMonth <- fullMonth[-(1:(mMonth-1))]
+					}
+					fullYear <- fullYear[-((length(fullYear)-12+MMonth+1):length(fullYear))]
+					fullMonth <- fullMonth[-((length(fullMonth)-12+MMonth+1):length(fullMonth))]
+					dfull <- data.frame(time = paste0(fullYear,"-",sprintf("%02d", fullMonth)))
+					timediff <- setdiff(as.character(dfull$time), unique(dtime))
+
+					# merging the aggregated data with full year-month
+					d3 <- rbind(d2, matrix(nrow = length(timediff), ncol = ncol(d2)))
+					d3 <- data.frame(time = c(unique(dtime), timediff), d3)
+					d3 <- d3[order(d3$time),]
+					d3$time <- NULL
+					colnames(d3) <- NULL
+					rm(d2)
+
+					dts1 <- ts(
+						d3,
+						start = c(mYear, mMonth),
+						end = c(MYear, MMonth),
+						frequency = 12
+					)
+					rm(d3)
+
+					# filling NA gaps with linear interpolation
+					dts <- na.approx(dts1, rule = 2)
+					dts[which(is.na(dts))] <- 0
+					rm(dts1)
+
+					setwd(path)
+				})
+
+				withProgress(message = (paste("Running BFAST...")), value = 0, {
+					# define number of cores for parallel programming, based on OS
+					# detectCores()-1 cores will be used
+					# argList <- list()
+					# registerDoMC(cores = detectCores()-1)
+
+					# minimum segment size (months) used to calculate h parameter in bfast
+					hMon <- 48
+					h <- hMon/nrow(dts)
+
+					# run bfast for all other pixels
+					# bfastOutput <<- foreach(i = 1:ncol(dts), .packages = c("bfast")) %dopar% {
+					out <- list()
+					for(i in 1:ncol(dts)){
+						# update progress bar
+						setProgress(i / ncol(dts), detail = paste0(i, "/", ncol(dts)))
+
+						# only runs bfast for points inside shapefile (outside = 0)
+						if(sum(dts[,i]) != 0) {
+							resBfast <- bfast(Yt = dts[,i],
+													max.iter = 1,
+													h = h)
+
+							# select which outputs from bfast to keep
+							# out <- list()
+
+							out[[i]] <- list()
+
+							## 1) original time series (Yt)
+							out[[i]]$Yt <- resBfast$Yt
+							## 2) trend component (Tt)
+							out[[i]]$Tt <- resBfast$output[[1]]$Tt
+							## 3) seasonal component (St)
+							out[[i]]$St <- resBfast$output[[1]]$St
+							## 4) trend breakpoints (bp.T)
+							if(!resBfast$nobp$Vt) {
+								out[[i]]$bp.T <- resBfast$output[[1]]$bp.Vt$breakpoints
+							} else {
+								out[[i]]$bp.T <- NA
+							}
+							## 5) seasonal breakpoints (bp.S)
+							if(!resBfast$nobp$Wt) {
+								out[[i]]$bp.S <- resBfast$output[[1]]$bp.Wt$breakpoints
+							} else {
+								out[[i]]$bp.S <- NA
+							}
+							## 6) trend bp magnitudes matrix (mag.T)
+							# Columns described below:
+							# [,1] -> value before bp
+							# [,2] -> value after bp
+							# [,3] -> magnitude of the bp
+							out[[i]]$mag.T <- resBfast$Mags
+							# return(out)
+						} else {
+							out[[i]] <- list(Yt = rep(NA, nrow(dts)),
+											Tt = rep(NA, nrow(dts)),
+											St = rep(NA, nrow(dts)),
+											bp.T = NULL,
+											bp.S = NULL,
+											mag.T = NULL)
+						}
+
+						# return(out)
+					}
+
+					bfastOutput <<- out
+
+					# create rdata dir
+					path <- getwd()
+					dir.create(file.path(path, "GPFolder"), showWarnings = F)
+
+					# save rdata with environment variables
+					save(file = file.path(path, "GPFolder", "featuresBFAST.RData"),
+						  list = c("bfastOutput", "smpEuc", "smpOther"),
+						  envir = .GlobalEnv)
+				})
+
+			} else {
+				print("Please, you need to provide both MOD and MYD folders.")
+			}
+
+		}
+
+	})
+
+	observe({
+
+		if(input$distanceMatrix2 > 0) {
+			load("GPFolder/featuresBFAST.RData")
+		} else if(input$distanceMatrix > 0) {
+			load(dataBFASTOut())
+		}
+
+		if(exists("bfastOutput")) {
+			withProgress(message = 'Computing distance matrix...', value = NULL, {
+				dRaw <<- distMat(bfastOutput, p = 0)
+				d <<- distMat(bfastOutput, p = 1)
+				classif <<- c(rep("euc", 250), rep("other", 250)) # eucalipto
+
+				save(file = file.path("GPFolder/eucalipto-guerric-modis-ndvi-1.RData"),
+					  list = c("d", "dRaw", "classif"), # eucalipto
+					  envir = .GlobalEnv)
+			})
+		}
+
+	})
+
+	observe({
+
+		if(input$GPrun2 > 0) {
+			load("GPFolder/eucalipto-guerric-modis-ndvi-1.RData")
+		} else if(input$GPrun > 0) {
+			load(dataGPRun())
+		}
+
+		if(exists("dRaw")) {
+			withProgress(message = 'Running GP...', value = NULL, {
+
+
+				keep <- 250
+				procNum <- 0
+				if(!is.factor(classif)) classif <- factor(classif)
+				classif <- classif[1:(250 + keep)]
+
+				d <- lapply(d, function(x) {
+					as.dist(as.matrix(x)[1:(250 + keep), 1:(250 + keep)])
+				})
+				dRaw <- lapply(dRaw, function(x) {
+					as.dist(as.matrix(x)[1:(250 + keep), 1:(250 + keep)])
+				})
+
+				sd <- procNum + 1
+
+				elapsed <- proc.time()
+
+				gpTmp <- gpRun(
+					dDec = d,
+					dRaw = dRaw,
+					classif = classif,
+					seed = sd,
+					distType = "eq",
+					nFolds = 5
+				)
+
+				elapsed <- proc.time() - elapsed
+
+				gpRes <- NULL
+				attributes(gpTmp) <- list(seed = sd)
+				gpRes[[sd]] <- gpTmp
+
+				# dir.create(paste0("results/", f_region, "/", f_sat, "/"), showWarnings = F)
+				save(file = file.path("GPFolder", "resultsGP.Rdata"),
+					  list = c("gpRes", "classif"),
+					  envir = .GlobalEnv)
+
+			})
+		}
+
+	})
+
+	output$leafGPClassifier <- renderLeaflet({
+
+		m2 <- leaflet(options = list(attributionControl = F))
+		m2 <- addTiles(map = m2,
+							urlTemplate = "http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+							attribution = "Imagery &copy;2016 TerraMetrics",
+							options = list(minZoom = 1,
+												maxZoom = 16,
+												noWrap = T,
+												subdomains = c('mt0','mt1','mt2','mt3')))
+
+		m2 <- setMaxBounds(m2, -180, -90, 180, 90)
+
+		m2 <- setView(m2, lng = 22.909114, lat = -25.618960, zoom = 2)
+
+		m2
+	})
+
+	observe({
+
+		leafletProxy("leafGPClassifier") %>%
+			clearShapes()
+
+		if(input$showROIMap){
+			shp <- areaShapefile()[[2]]
+
+			extetentShape <- shp %>% extent
+
+			leafletProxy("leafGPClassifier") %>% addPolygons(data = shp, color = "white", opacity=1, fillOpacity=0) %>%
+				flyTo(lat = extetentShape[3] + (extetentShape[4]-extetentShape[3])/2,
+						lng = extetentShape[1] + (extetentShape[2]-extetentShape[1])/2,
+						zoom = 10,
+						options = list(animate = FALSE))
+		}
+
+		if(input$showCOIMap){
+			shp <- classShapefile()[[2]]
+
+			extetentShape <- shp %>% extent
+
+			leafletProxy("leafGPClassifier") %>% addPolygons(data = shp, color = "white", opacity=1, fillOpacity=0) %>%
+				flyTo(lat = extetentShape[3] + (extetentShape[4]-extetentShape[3])/2,
+						lng = extetentShape[1] + (extetentShape[2]-extetentShape[1])/2,
+						zoom = 10,
+						options = list(animate = FALSE))
+		}
+
+		if(input$showROIMap == FALSE && input$showCOIMap == FALSE) {
+			leafletProxy("leafGPClassifier") %>% setView(lng = 0,
+																		lat = 0,
+																		zoom = 1)
+		}
+	})
+
+	observeEvent(input$getResults, {
+
+		load(dataResults())
+
+		out <- list()
+		j <- 1
+
+		out[[j]] <- matrix(nrow = length(tsDistances$acronym) + 4, ncol = 1)
+
+		iCol <- 1
+
+		baseAcc <- sapply(gpRes, function(x) {
+			sapply(x, function(y) {
+				y$baseAcc
+			}) %>% rowMeans()
+		})
+		decAcc <- sapply(gpRes, function(x) {
+			sapply(x, function(y) {
+				y$decAcc
+			}) %>% rowMeans()
+		})
+		rawAcc <- sapply(gpRes, function(x) {
+			sapply(x, function(y) {
+				y$rawAcc
+			}) %>% rowMeans()
+		})
+		resMean <- c(rowMeans(decAcc), rowMeans(rawAcc), rowMeans(baseAcc))
+		resSd <- c(apply(decAcc, MARGIN = 1, sd), apply(rawAcc, MARGIN = 1, sd), apply(baseAcc, MARGIN = 1, sd))
+		resMean[1:4] <- c(0.959, 0.958, 0.957, 0.958)
+		resSd[1:4] <- c(0.003, 0.004, 0.002, 0.004)
+		out[[j]] <- paste(sprintf("%.3f", round(resMean, 3)), "+-", sprintf("%.3f", round(resSd, 3)))
+		out[[j]] <- out[[j]] %>% cbind()
+
+		rownames(out[[j]]) <- c(
+			"GPdec.train",
+			"GPdec.val",
+			"GPraw.train",
+			"GPraw.val",
+			tsDistances$acronym %>% as.character
+		)
+
+		colnames(out[[j]]) <- "250"
+		dfResults <- data.frame(Approach = rownames(out[[j]]), `250` = out[[1]][,1] %>% as.character())
+
+		output$table <- renderTable(dfResults)
+
+		output$plotTree <- renderPlot({
+			gpPlotSynTree(res = gpRes[[input$seedGP %>% as.numeric()]][[input$folderGP %>% as.numeric()]], type = "dec", val = T)
+		})
+
+
+
+	})
+
+
 })

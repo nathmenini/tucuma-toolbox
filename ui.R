@@ -16,16 +16,21 @@ shinyUI(navbarPage(
 				  source(file.path("ui/ui-tab-bfast-3.R"), local = TRUE)$value
 	),
 
-	navbarMenu("Landsat Downloader",
+	navbarMenu("DAM",
 				  source(file.path("ui/ui-tab-download-pixel.R"), local = TRUE)$value,
 				  source(file.path("ui/ui-tab-download-raster.R"), local = TRUE)$value
 	),
 
-	navbarMenu("Time Series Retrieval",
+	navbarMenu("TSR",
 				  source(file.path("ui/ui-tab-tsr-1.R"), local = TRUE)$value,
 				  source(file.path("ui/ui-tab-tsr-2.R"), local = TRUE)$value,
 				  source(file.path("ui/ui-tab-tsr-3.R"), local = TRUE)$value
 
+	),
+
+	navbarMenu("GPC",
+				  source(file.path("ui/ui-tab-GP-1.R"), local = TRUE)$value,
+				  source(file.path("ui/ui-tab-GP-2.R"), local = TRUE)$value
 	),
 
 	source(file.path("ui/ui-tab-bfast-4.R"), local = TRUE)$value

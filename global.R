@@ -15,30 +15,50 @@ if(!require("pacman")) {
 
 # CRAN
 packs <- c(
+	"beepr",
+	"bfast",
+	"bfastSpatial",
+	"car",
+	"caret",
+	"cluster",
+	"colorspace",
 	"data.table",
 	"devtools",
+	"doMC",
 	"dplyr",
+	"FastKNN",
 	"fields",
+	"foreach",
 	"ggmap",
+	"igraph",
 	"knitr",
 	"leaflet",
 	"lubridate",
 	"magrittr",
 	"markdown",
+	"parallel",
+	"pryr",
+	"purrr",
 	"RColorBrewer",
 	"raster",
 	"Rcpp",
+	"rgeos",
+	"rgp",
+	"robust",
+	"robustbase",
 	"rPython",
 	"SDMTools",
 	"shiny",
 	"shinyBS",
 	"shinyFiles",
 	"shinyjs",
+	"stringr",
 	"strucchange",
 	"tools",
+	"TSdist",
+	"xtable",
 	"zoo"
 )
-
 
 # GitHub
 packs_gh <- c(
@@ -165,7 +185,7 @@ plotRaw <- function(serie, matchCol, xAxisCustom, ylimCustom, ylab, seriePar, co
 		x = serie$date,
 		col = rgb(.1, .1, .1)
 	)
-	
+
 	points(
 		y = serie[, matchCol],
 		x = serie$date,
@@ -232,7 +252,7 @@ plotBfm <- function(serie, matchCol, bfmOut, xAxisCustom, ylimCustom, ylab) {
 	condMoni <- dates >= round(bfmOut$monitor[1], digits = 3)
 	condStart <- dates <= round(bfmOut$history[2], digits = 3)
 	condPred <- dates >= round(bfmOut$history[1], digits = 3)
-	
+
 	# background blank plot
 	par(mar = c(4, 4, 0, 0) + 0.1)
 	plot(y = serie[, matchCol],
@@ -717,3 +737,509 @@ cppFunction('double simCosC(NumericVector x, NumericVector y) {
 				return dot / (sqrt(denom_a) * sqrt(denom_b));
 				}')
 
+
+
+# GP aba
+pgm <- function(serie) {
+	n <- length(serie)
+	m <- n/2 - 1
+	I <- abs(fft(serie)/sqrt(n))^2  # periodogram
+	P <- (4/n)*I                    # scaled-periodogram
+	f <- 0:m/n
+	list(f=f, P=P[1:(m+1)])
+}
+
+tsDistances <- data.frame(
+	name = c(
+		"cor", "fourier", "sts", "spec.llr", "int.per", "acf", "euclidean",
+		"manhattan", "infnorm", "cid", "cort", "mindist.sax", "pacf",
+		"ccor", "per", "ar.mah.statistic", "ar.pic", "erp", "edr", "dtw"
+	),
+	acronym = c(
+		"PEC", "FOU", "STS", "LLR", "INP", "ACF", "EUC",
+		"MAN", "INF", "CID", "CRT", "SAX", "PCF", "COR",
+		"PER", "ARM", "ARP", "ERP", "EDR", "DTW"
+	),
+	type = c(
+		"eq", "eq", "eq", "eq", "eq", "un", "eq", "eq", "eq", "eq", "eq",
+		"un", "un", "un", "eq", "un", "un", "un", "un", "un"
+	)
+)
+
+distType <- c("eq") # "eq", "un"
+numCores <- 4
+
+# distance matrices calculation
+# distance matrices calculation
+distMat <- function(input, p) {
+	registerDoMC(cores = numCores)
+
+	argListParallel <- list()
+	argListParallel$j <- 1:numCores
+	argListParallel$.packages <- packs
+	argListParallel$.export <- c("tsDistances")
+	out <- do.call(foreach, args = argListParallel) %dopar% {
+		# divisao para dataset com "eq", "un"
+		if(j == 1) iDist <- 1:12
+		if(j == 2) iDist <- 13:16
+		if(j == 3) iDist <- 17:18
+		if(j == 4) iDist <- 19:20
+
+		result <- list()
+		for(i in iDist) {
+			# elapsed <- proc.time()
+
+			argList <- list()
+			argList$distance <- as.character(tsDistances$name[i])
+			if(argList$distance %in% c("edr","lcss")) argList$epsilon <- 0.1
+			if(argList$distance == "erp") argList$g <- 0
+			if(argList$distance == "tquest") argList$tau <- 50
+			if(argList$distance == "pred") argList$h <- 6
+			if(argList$distance == "mindist.sax") argList$w <- 40
+			if(argList$distance == "lb.keogh") argList$window.size <- 9
+			if(argList$distance == "dtw") argList$distance.only <- T
+			if(p == 0) argList$X <- lapply(input, function(x) x$Yt)
+			if(p == 1) argList$X <- lapply(input, function(x) x$Tt)
+			result[[which(iDist == i)]] <- do.call(TSDatabaseDistances, argList)
+		}
+
+		return(result)
+	}
+
+	# concatenate outputs from each core
+	out <- c(out[[1]], out[[2]], out[[3]], out[[4]])
+
+	if(p == 2) {
+		# trend breakpoints-based distance
+		tmp <- lapply(input, function(x) x$bp.T)
+		tmp2 <- unlist(lapply(tmp, function(x) {
+			if(sum(is.na(x[[1]]))) 0
+			else length(x)
+		}))
+		out[[nrow(tsDistances) + 1]] <- dist(tmp2, method = "manhattan")
+
+		# trend piecewise-parameters-based distance
+		minYear <- floor(min(unlist(lapply(input, function(x) { min(time(x$Yt)) }))))
+		tmp <- lapply(input, function(x) {
+			# y = m*x + b
+			m <- NULL
+			b <- NULL
+			w <- 1 # temporal weight
+			l <- length(x$Tt)
+			# use the first 2 points of the TS to calculate the first m and b
+			m <- (x$Tt[2] - x$Tt[1])/(time(x$Tt)[2] - time(x$Tt)[1])
+			b <- x$Tt[2] - m*(time(x$Tt)[2] - minYear)
+			if(!is.na(x$bp.T)[1]) {
+				w <- x$bp.T[1]/l
+				for(i in 1:length(x$bp.T)) {
+					# use 2 points before each BP to calculate remaining m and b
+					m <- c(m, (x$Tt[x$bp.T[i]+2] - x$Tt[x$bp.T[i]+1])/(time(x$Tt)[x$bp.T[i]+2] - time(x$Tt)[x$bp.T[i]+1]))
+					b <- c(b, x$Tt[x$bp.T[i]+2] - m[i+1]*(time(x$Tt)[x$bp.T[i]+2] - minYear))
+					if(i > 1) {
+						w <- c(w, (x$bp.T[i] - x$bp.T[i-1])/l)
+					}
+				}
+				w <- c(w, (l - x$bp.T[i])/l)
+			}
+			data.frame(m = m, b = b, w = w)
+		})
+		tmp2 <- lapply(tmp, function(x) {
+			c(weighted.mean(x$m, x$w),
+			  weighted.mean(x$b, x$w))
+		})
+		tmp2 <- matrix(unlist(tmp2), ncol = 2, byrow = T)
+		out[[nrow(tsDistances) + 2]] <- dist(tmp2, method = "euclidean")
+
+		# seasonal parameters-based distance
+		tmp <- lapply(input, function(x) {
+			# amplitude
+			amp <- max(x$St)-min(x$St)
+			# frequency
+			a <- x$St
+			p <- pgm(a)
+			mp <- sort(p$P, TRUE)[1:5]
+			# weighted mean of frequencies using peridogram values
+			freq = sum((length(a)/as.numeric(names(mp)) * mp)/sum(mp))
+			data.frame(amp = amp, freq = freq)
+		})
+		tmp2 <- matrix(unlist(tmp), ncol = 2, byrow = T)
+		out[[nrow(tsDistances) + 3]] <- dist(tmp2, method = "euclidean")
+	}
+
+	return(out)
+}
+
+gpFunctions <- c("+", "-", "*", "sSqrt", "sDiv", "sLn", "abs")
+
+# GP aux function
+gpAux <- function(dTest,
+						dVal,
+						dTrain,
+						classifTest,
+						classifVal,
+						classifTrain,
+						seed) {
+
+	# GP parameters
+	sLn <- function(a) ifelse(a <= 0, 0, log(a))
+	sDiv <- function(a,b) ifelse(b == 0, 1, a/b)
+	sSqrt <- safeSqroot
+	customFunctionSet <- functionSet(list = gpFunctions)
+	customConstantSet <- constantFactorySet(function() rnorm(1))
+	customInputVariableSet <- inputVariableSet(list = names(dTrain))
+
+	# fitness function is a minimization problem
+	customFitnessFunction <- function(f) {
+		if(class(suppressWarnings(do.call(f, dTrain))) != "dist") {
+			return(Inf)
+		} else{
+			# kNN classifier
+			groups <- knn_training_function(
+				dataset = matrix(nrow = length(classifTrain)),
+				distance = suppressWarnings(do.call(f, dTrain) %>% as.matrix()),
+				label = cbind(as.character(classifTrain)),
+				k = 10 # kNN
+			)
+			# normalized_accuracy
+			groups <- factor(groups, levels(classifTrain))
+			confMat <- table(classifTrain, groups)
+			accTrain <- mean(c(diag(confMat)[1] / sum(confMat[1,]),
+									 diag(confMat)[2] / sum(confMat[2,])))
+			return(1 - accTrain)
+		}
+	}
+
+	# progress monitor to keep individuals
+	indiv <- list()
+	indiv$fit <- indiv$pop <- indiv$score <- NULL
+	customProgressMonitor <- function(population, objectiveVectors, fitnessFunction, stepNumber, evaluationNumber, bestFitness, timeElapsed, ...) {
+		# keeping v individuals for validation set
+		v <- 10
+		ord <- order(objectiveVectors$fitnessValues)[1:v]
+		indiv$fit <<- c(indiv$fit, 1 - objectiveVectors$fitnessValues[ord])
+		indiv$pop <<- c(indiv$pop, population[ord])
+	}
+
+	set.seed(seed)
+	popSize <- 100
+	gpResult <- geneticProgramming(functionSet = customFunctionSet,
+											 inputVariables = customInputVariableSet,
+											 constantSet = customConstantSet,
+											 fitnessFunction = customFitnessFunction,
+											 crossoverFunction = pryr::partial(crossover, crossoverprob = 0.9),
+											 mutationFunction = pryr::partial(mutateSubtree, mutatesubtreeprob = 0.1, funcset = customFunctionSet, inset = customInputVariableSet, conset = customConstantSet),
+											 populationSize = popSize,
+											 stopCondition = makeStepsStopCondition(50),
+											 searchHeuristic = makeAgeFitnessComplexityParetoGpSearchHeuristic(lambda = popSize*0.25, crossoverProbability = 0.9, newIndividualsMaxDepth = 10, enableComplexityCriterion = T),
+											 progressMonitor = customProgressMonitor)
+
+	gpResult$fitnessValues <- 1 - gpResult$fitnessValues
+	bestSolTrain <- gpResult$population[gpResult$fitnessValues == max(gpResult$fitnessValues)]
+	bestSolTrain <- bestSolTrain[[which.max(sapply(bestSolTrain, funcDepth))]]
+
+	# validation set
+	for(i in 1:length(indiv$pop)) {
+		groups <- knn_training_function(
+			dataset = matrix(nrow = length(classifVal)),
+			distance = suppressWarnings(do.call(indiv$pop[[i]], dVal) %>% as.matrix()),
+			label = cbind(as.character(classifVal)),
+			k = 10 # kNN
+		)
+		groups <- factor(groups, levels(classifVal))
+		confMat <- table(classifVal, groups)
+		accVal <- mean(c(diag(confMat)[1] / sum(confMat[1, ]),
+							  diag(confMat)[2] / sum(confMat[2, ])))
+		indiv$score <- c(indiv$score, mean(c(indiv$fit[i], accVal)) - sd(c(indiv$fit[i], accVal)))
+	}
+
+	bestSolVal <- indiv$pop[indiv$score == max(indiv$score)]
+	bestSolVal <- bestSolVal[[which.max(sapply(bestSolVal, funcDepth))]]
+
+	# test set
+	accTest <- NULL
+	## without validation set
+	groups <- knn_training_function(
+		dataset = matrix(nrow = length(classifTest)),
+		distance = suppressWarnings(do.call(bestSolTrain, dTest) %>% as.matrix()),
+		label = cbind(as.character(classifTest)),
+		k = 10 # kNN
+	)
+	groups <- factor(groups, levels(classifTest))
+	confMat <- table(classifTest, groups)
+	wrongTrain <- which(classifTest != groups)
+	accTest[1] <- mean(c(diag(confMat)[1] / sum(confMat[1,]),
+								diag(confMat)[2] / sum(confMat[2,])))
+
+	## with validation set
+	groups <- knn_training_function(
+		dataset = matrix(nrow = length(classifTest)),
+		distance = suppressWarnings(do.call(bestSolVal, dTest) %>% as.matrix()),
+		label = cbind(as.character(classifTest)),
+		k = 10 # kNN
+	)
+	groups <- factor(groups, levels(classifTest))
+	confMat <- table(classifTest, groups)
+	wrongVal <- which(classifTest != groups)
+	accTest[2] <- mean(c(diag(confMat)[1] / sum(confMat[1,]),
+								diag(confMat)[2] / sum(confMat[2,])))
+	accTest <- matrix(accTest, ncol = 2)
+	colnames(accTest) <- c("without_val", "with_val")
+
+	# prepare list for output
+	res <- list()
+	res$bestSolTrain <- bestSolTrain
+	res$bestSolVal <- bestSolVal
+	res$wrongTrain <- wrongTrain
+	res$wrongVal <- wrongVal
+	res$accTest <- accTest
+
+	return(res)
+}
+
+# GP run function
+gpRun <- function(dDec,
+						dRaw,
+						classif,
+						seed,
+						distType = "eq",
+						nFolds = 5) {
+	# subset tsDistances if only unequal distances are used
+	if(distType == "un") tsDistances <- tsDistances[tsDistances$type == distType, ]
+
+	# create k aproximatelly equally sized folds
+	k <- nFolds
+	set.seed(seed)
+	folds <- as.character(classif)
+	folds[which(folds == levels(classif)[1])] <- sample(cut(1:length(which(folds == levels(classif)[1])), breaks = k, labels = F))
+	folds[which(folds == levels(classif)[2])] <- sample(cut(1:length(which(folds == levels(classif)[2])), breaks = k, labels = F))
+	folds <- as.numeric(folds)
+
+	# define number of cores for parallel programming
+	argList <- list()
+	registerDoMC(cores = nFolds)
+
+	# run GP with k-fold CV
+	argList$iTest <- 1:k
+	argList$.packages <- packs
+	argList$.export <- c("gpAux", "gpFunctions", "tsDistances")
+	gpOut <- do.call(foreach, argList) %dopar% {
+		iVal <- iTest + 1
+		if(iVal > nFolds) iVal <- 1
+
+		# split fold data into test/validation/train
+		indTest <- which(folds == iTest, arr.ind = T)
+		indVal <- which(folds == iVal, arr.ind = T)
+		classifTest <- classif[indTest]
+		classifVal <- classif[indVal]
+		classifTrain <- classif[-c(indTest, indVal)]
+
+		# split distance matrix data into test/validation/train and run GP
+		dRawTest <- dRawVal <- dRawTrain <- dDecTest <- dDecVal  <- dDecTrain <- list()
+
+		## GPraw
+		dRawTest <- lapply(dRaw, function(x) {
+			as.dist(as.matrix(x)[indTest, indTest])
+		})
+		dRawVal <- lapply(dRaw, function(x) {
+			as.dist(as.matrix(x)[indVal, indVal])
+		})
+		dRawTrain <- lapply(dRaw, function(x) {
+			as.dist(as.matrix(x)[-c(indTest, indVal), -c(indTest, indVal)])
+		})
+		names(dRawTest) <- names(dRawVal) <- names(dRawTrain) <- as.character(tsDistances$acronym)
+		gpRawRes <- gpAux(
+			dTest = dRawTest,
+			dVal = dRawVal,
+			dTrain = dRawTrain,
+			classifTest = classifTest,
+			classifVal = classifVal,
+			classifTrain = classifTrain,
+			seed = seed
+		)
+
+		## GPdec
+		dDecTest <- lapply(dDec, function(x) {
+			as.dist(as.matrix(x)[indTest, indTest])
+		})
+		dDecVal <- lapply(dDec, function(x) {
+			as.dist(as.matrix(x)[indVal, indVal])
+		})
+		dDecTrain <- lapply(dDec, function(x) {
+			as.dist(as.matrix(x)[-c(indTest, indVal), -c(indTest, indVal)])
+		})
+		names(dDecTest) <- names(dDecVal) <- names(dDecTrain) <- c(paste0(as.character(tsDistances$acronym), "_T"), paste0(as.character(tsDistances$acronym), "_S"), paste0(rep("DEC"), 1:3))
+		gpDecRes <- gpAux(
+			dTest = dDecTest,
+			dVal = dDecVal,
+			dTrain = dDecTrain,
+			classifTest = classifTest,
+			classifVal = classifVal,
+			classifTrain = classifTrain,
+			seed = seed
+		)
+
+		# change the environment of bestSol due to the parallelization
+		# If not fixed, the Rdata file size would be very large due to some
+		# environment related problems
+		oldEnv <- c(environment(gpRawRes$bestSolTrain),
+						environment(gpDecRes$bestSolTrain))
+		environment(gpRawRes$bestSolTrain) <- .GlobalEnv
+		environment(gpRawRes$bestSolVal) <- .GlobalEnv
+		environment(gpDecRes$bestSolTrain) <- .GlobalEnv
+		environment(gpDecRes$bestSolVal) <- .GlobalEnv
+
+		# baseline results (individual distance/similarity functions)
+		accBaseline <- NULL
+		wrongBaseline <- list()
+		for(l in 1:length(dRawTest)) {
+			groups <- knn_training_function(
+				dataset = matrix(nrow = length(classifTest)),
+				distance = suppressWarnings(dRawTest[[l]] %>% as.matrix()),
+				label = cbind(as.character(classifTest)),
+				k = 10 # kNN
+			)
+			groups <- factor(groups, levels(classifTest))
+			confMat <- table(classifTest, groups)
+			wrongBaseline[[l]] <- which(classifTest != groups)
+			accBaseline[l] <- mean(c(diag(confMat)[1] / sum(confMat[1,]),
+											 diag(confMat)[2] / sum(confMat[2,])))
+		}
+		accBaseline <- matrix(accBaseline, ncol = length(dRawTest))
+		colnames(accBaseline) <- as.character(tsDistances$acronym)
+
+		# prepare list for output
+		out <- list()
+		out$oldEnv <- oldEnv
+		out$rawBestIndTrain <- gpRawRes$bestSolTrain
+		out$rawBestIndVal <- gpRawRes$bestSolVal
+		out$decBestIndTrain <- gpDecRes$bestSolTrain
+		out$decBestIndVal <- gpDecRes$bestSolVal
+		out$rawWrongTrain <- gpRawRes$wrongTrain
+		out$rawWrongVal <- gpRawRes$wrongVal
+		out$decWrongTrain <- gpDecRes$wrongTrain
+		out$decWrongVal <- gpDecRes$wrongVal
+		out$baseWrong <- wrongBaseline
+		out$rawAcc <- gpRawRes$accTest
+		out$decAcc <- gpDecRes$accTest
+		out$baseAcc <- accBaseline
+
+		return(out)
+	}
+
+	for(i in 1:k) {
+		for(j in 1:2) {
+			rm(list = ls(envir = gpOut[[i]]$oldEnv[[j]]),
+				envir = gpOut[[i]]$oldEnv[[j]])
+		}
+		gpOut[[i]]$oldEnv <- NULL
+	}
+
+	if(Sys.info()[["sysname"]] == "Windows") {
+		close(pb)
+		stopCluster(cl)
+	}
+
+	return(gpOut)
+}
+
+# GP raw vs decomposition comparison
+gpPlotFold <- function(res, titleText = "") {
+	nFolds <- length(res)
+
+	defaultPar <- par()
+	par(mar = c(5, 4, 4, 10) + .1)
+
+	plot(0, 0,
+		  xlim = c(1, nFolds),
+		  ylim = c(0, 1),
+		  col = "white",
+		  xlab = "fold",
+		  ylab = "balanced accuracy",
+		  yaxp = c(0,1,10),
+		  main = titleText)
+	abline(h = seq(0,1,.1), v = 1:5, col = "gray", lty = 3)
+	box()
+
+	par(xpd = T)
+
+	# baseline
+	basAcc <- sapply(res, function(x) { x$baseline })
+	for(i in 1:nrow(basAcc)) {
+		lines(
+			y = basAcc[i,],
+			x = 1:nFolds,
+			lwd = 1,
+			col = rainbow(nrow(basAcc))[i]
+		)
+	}
+	# GPdec
+	decAcc <- sapply(res, function(x) { x$decAcc })
+	lines(decAcc,
+			col = "black",
+			lwd = 2,
+			lty = 1)
+	# GPraw
+	rawAcc <- sapply(res, function(x) { x$rawAcc })
+	lines(rawAcc,
+			col = "black",
+			lwd = 2,
+			lty = 5)
+
+	legend(
+		"right",
+		inset = c(-0.41, 0),
+		legend = c(
+			expression("GP"["dec."]),
+			expression("GP"["raw"]),
+			as.character(tsDistances$acronym)
+		),
+		col = c(rep("black", 2), rainbow(9)),
+		lty = c(1, 5, rep(1, 9)),
+		lwd = c(2, 2, rep(1, 9)),
+		bty = "n"
+	)
+
+	suppressWarnings(par(defaultPar))
+}
+
+gpPlotSynTree <- function(res, type = c("raw", "dec"), val = NULL) {
+	type <- match.arg(type)
+
+	if(type == "dec") {
+		if(val) {
+			z <- body(res$decBestIndVal)
+		} else {
+			z <- body(res$decBestIndTrain)
+		}
+	}
+	if(type == "raw") {
+		if(val) {
+			z <- body(res$rawBestIndVal)
+		} else {
+			z <- body(res$rawBestIndTrain)
+		}
+	}
+
+	g1 <- exprToGraph(z)
+
+	x1 <- suppressWarnings(which(!is.na(as.numeric(g1$vertices))))
+	x2 <- suppressWarnings(round(as.numeric(g1$vertices), 1))
+	g1$vertices[x1] <- as.character(x2[!is.na(x2)])
+	g2 <- graph(g1$edges, n = length(g1$vertices))
+	V(g2)$label <- g1$vertices %>% str_split("_") %>% map_chr(1)
+	V(g2)$col <-
+		ifelse(
+			g1$vertices %in% gpFunctions,
+			"white",
+			ifelse(!is.na(x2), "lightgoldenrod1", "SkyBlue")
+		)
+	plot(g2,
+		  layout = layout.reingold.tilford(g2, root = 1),
+		  edge.arrow.size = 0.8,
+		  asp = -1,
+		  margin = 0,
+		  vertex.label.cex = 0.6,
+		  vertex.size = 16,
+		  vertex.color = V(g2)$col,
+		  vertex.label.color = "black")
+}
