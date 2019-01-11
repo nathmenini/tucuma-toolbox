@@ -48,10 +48,11 @@ tabPanel(
 		br(),
 
 		HTML("<h4><b>Clustering:</b></h5>"),
+		actionButton("botaoElbow", "Compute Elbow plot", width = 200, icon = icon("search", lib="font-awesome")),
 		selectInput(inputId = "selectCluster",
 						label = "Number of clusters",
-						choices = list(2,3,4,5,6,7,8,9,10,11,12,13,14,15)),
-		actionButton("botaoCluster", "Detect clusters", width = 150, icon = icon("search", lib="font-awesome"))
+						choices = list(0,2,3,4,5,6,7,8,9,10,11,12,13,14,15), width = 200),
+		actionButton("botaoCluster", "Elbow and Clusters Plots", width = 200, icon = icon("search", lib="font-awesome"))
 	),
 
 	mainPanel(

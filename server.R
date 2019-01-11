@@ -1,6 +1,8 @@
 library(shiny)
 source("global.R", local = TRUE)
 
+wtest <<- NULL
+
 options(shiny.maxRequestSize=100*1024^2)
 
 shinyServer(function(input, output, session) {
@@ -394,530 +396,6 @@ shinyServer(function(input, output, session) {
 		)
 	}
 
-# ----------------------------------------------------------- ANALYSIS ----
-
-	# call to event_getTs in Map tab
-	# display a message if the download is successful
-	output$text_getTs <- renderText({
-		event_getTs()
-		return(
-			as.character(div(
-					align = "center",
-					strong("Data succesfully downloaded!"),
-					HTML('Please head to the <i class="fa fa-bar-chart fa-lg"></i><b>Analysis</b> tab.')
-			))
-		)
-	})
-
-	# subset from serie using select_satPlot, and merge data in a single df
-	serieSel <- eventReactive(input$select_satPlot, valueExpr = {
-		serie <- event_getTs()
-
-		# only show satellites selected in select_satPlot
-		satOrder <- attr(serie, "satOrder")
-		whichSel <- which(satOrder %in% input$select_satPlot)
-		serie <- serie[whichSel]
-
-		# join all data in a single df
-		tmp <- NULL
-		for (i in 1:length(whichSel)) {
-			tmp <- rbind(tmp, serie[[i]])
-		}
-		serie <- tmp
-
-		# sort data by date
-		serie <- serie[order(serie$date), ]
-
-		# removendo NAs
-		serie <- na.omit(serie)
-
-		# remove leap year additional day (29th Feb), if it exists
-		leapDay <- grep("-02-29", serie$date)
-		if(length(leapDay) > 0) {
-			serie <- serie[-leapDay, ]
-		}
-
-		# group by date and satellite using median
-		serie <- serie %>%
-			group_by(date) %>%
-			summarise_all(function(x) {
-				if (typeof(x) == "character") {
-					if (x %>% unique() %>% length() > 1) {
-						"Mixed"
-					} else {
-						x[1]
-					}
-				} else {
-					median(x)
-				}
-			}) %>%
-			data.frame()
-
-		return(serie)
-	})
-
-	observe({
-		# subset the chosen index from the data
-		matchCol <- which(input$select_index == colnames(serieSel()))
-		satOrder <- satChoices[which(satChoices %in% input$select_satPlot)]
-
-		# add "Mixed" to satOrder, if it exists in the data
-		if("Mixed" %in% serieSel()$sat) {
-			satOrder <- c(satOrder, "Mixed" = "Mixed")
-		}
-
-		# define a vector of graphical parameters (color and pch),
-		# per satellite
-		seriePar <- matrix(sapply(serieSel()$sat, satPar),
-						   ncol = 2,
-						   byrow = T)
-
-		# custom ylim parameter
-		ylimCustom <- c(0, 1)
-		if (sum(serieSel()[, matchCol] < 0, na.rm = TRUE) > 0) {
-			ylimCustom[1] <- -1
-		}
-		if (sum(serieSel()[, matchCol] > 1, na.rm = TRUE) > 0) {
-			ylimCustom[2] <- 1.5
-		}
-
-		# custom x axis
-		xAxisCustom <- seq(as.numeric(substr(range(serieSel()$date), 1, 4))[1] - 1,
-						   as.numeric(substr(range(serieSel()$date), 1, 4))[2] + 1,
-						   1)
-
-		# bfastmonitor line segment parameter
-		h <- 0.25
-
-		bfm_formula <- switch(
-			input$select_bfm_formula,
-			"trend + harmon" = response ~ trend + harmon,
-			"harmon" = response ~ harmon,
-			"trend" = response ~ trend
-		)
-
-		# conditions to check if few data is available for bfastmonitor
-		cond1 <- switch(
-			input$select_bfm_formula,
-			"trend + harmon" = length(serieSel()[, matchCol]) > 4,
-			"harmon" = length(serieSel()[, matchCol]) > 3,
-			"trend" = length(serieSel()[, matchCol]) > 2
-		)
-		cond2 <- floor(h * length(serieSel()[, matchCol])) > 1
-
-		# update input$select_bfm_monitor
-		updateDateInput(
-			session = session,
-			inputId = "select_bfm_monitor",
-			min = head(serieSel()$date, 1),
-			max = tail(serieSel()$date, 1),
-			value = tail(serieSel()$date,
-						 floor(length(serieSel()$date)*0.3))[1]
-		)
-
-		# update input$select_bf01_order
-		if(input$select_bf01_formula != "trend") {
-			if(input$select_bf01_formula == "harmon") {
-				pars <- 1
-			} else { # "trend + harmon"
-				pars <- 2
-			}
-			orderMaxBf01 <- 0
-			cond3 <- T
-			while(cond3) {
-				orderMaxBf01 <- orderMaxBf01 + 1
-				cond3 <- (5 * (pars + 2 * orderMaxBf01)) < length(serieSel()[, matchCol]) / 2
-			}
-			orderMaxBf01 <- orderMaxBf01 - 1
-			updateSliderInput(
-				session = session,
-				inputId = "select_bf01_order",
-				max = orderMaxBf01
-			)
-		}
-
-		# update select_bfm_order (WIP)
-		# if(input$select_bfm_formula != "trend") {
-		# 	if(input$select_bfm_history == "ROC") {
-		# 		orderMaxBfm <- 0
-		# 		cond4 <- F
-		# 		while(!cond4) {
-		# 			orderMaxBfm <- orderMaxBfm + 1
-		# 			data <- bfastts(data = serieSel()[, matchCol],
-		# 							dates = serieSel()$date,
-		# 							type = "irregular")
-		# 			data_tspp <- bfastpp(data, order = orderMaxBfm, lag = NULL, slag = NULL)
-		# 			history_tspp <- subset(data_tspp, time < decimal_date(input$select_bfm_monitor))
-		# 			data_rev <- history_tspp[nrow(history_tspp):1,]
-		# 			data_rev$response <- ts(data_rev$response)
-		# 			suppressWarnings(
-		# 				y_rcus <- efp(bfm_formula, data = data_rev, type = "Rec-CUSUM")
-		# 			)
-		# 			cond4 <- is.na(y_rcus$process[1])
-		# 		}
-		# 		orderMaxBfm <- orderMaxBfm - 1
-		# 		updateSliderInput(
-		# 			session = session,
-		# 			inputId = "select_bfm_order",
-		# 			max = orderMaxBfm
-		# 		)
-		# 	}
-		# }
-
-		# raw time series plot
-		output$plot_raw <- renderPlot({
-			output$action_downloadDataRaw <- downloadHandler(
-				filename = paste0("be-data-ts", ".csv"),
-				content = {function(file) {
-					if(v$markerDown$show) {
-						header <- rep("", ncol(serieSel()))
-						names(header) <- c("LatLong Coordinates", as.character(c(v$markerDown$lat, v$markerDown$lon)), rep("", ncol(serieSel()) - 3))
-						write.table(x = t(header), file = file, sep = ",", row.names = F)
-						options(warn = -1)
-						write.table(x = serieSel(), file = file, sep = ",", row.names = F, append = T)
-						options(warn = 0)
-					} else {
-						write.table(x = serieSel(), file = file, sep = ",", row.names = F)
-					}
-				}}
-			)
-
-			plotRawComb <- function() {
-				plotRaw(
-					serie = serieSel(),
-					matchCol = matchCol,
-					xAxisCustom = xAxisCustom,
-					ylimCustom = ylimCustom,
-					ylab = toupper(colnames(serieSel())[matchCol]),
-					seriePar = seriePar,
-					coords = v$markerDown
-				)
-				plotRawLegend(
-					satOrder = satOrder,
-					seriePar = seriePar
-				)
-			}
-
-			output$action_downloadPlotRaw_jpg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-ts", ".jpg"),
-				content = {function(file) {
-					jpeg(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotRawComb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotRaw_png <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-ts", ".png"),
-				content = {function(file) {
-					png(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotRawComb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotRaw_svg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-ts", ".svg"),
-				content = {function(file) {
-					svg(file, width = 16, height = 8)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotRawComb()
-					dev.off()
-				}}
-			)
-
-			plotRaw(
-				serie = serieSel(),
-				matchCol = matchCol,
-				xAxisCustom = xAxisCustom,
-				ylimCustom = ylimCustom,
-				ylab = toupper(colnames(serieSel())[matchCol]),
-				seriePar = seriePar,
-				coords = v$markerDown
-			)
-		})
-
-		# bfastmonitor results plot
-		output$plot_bfm <- renderPlot({
-			# if(input$select_bfm_formula != "trend") {
-			# 	validate(
-			# 		need(
-			# 			input$select_bfm_order <= orderMaxBfm,
-			# 			FALSE
-			# 		)
-			# 	)
-			# }
-			validate(
-				need(
-					cond1 & cond2,
-					"The selected history period hasn't enough observations."
-				)
-			)
-
-			# run bfastmonitor
-			res <- ppBfastmonitor(
-				x = serieSel()[, matchCol],
-				date = serieSel()$date,
-				formula = bfm_formula,
-				order = input$select_bfm_order,
-				start = decimal_date(input$select_bfm_monitor),
-				history = input$select_bfm_history,
-				h = h
-			)
-
-			output$action_downloadDataBfm <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-results-bfastmonitor", ".rds"),
-				content = {function(file) {
-					saveRDS(object = res,
-							file = file)
-				}}
-			)
-
-			plotBfmComb <- function() {
-				plotBfm(
-					serie = serieSel(),
-					matchCol = matchCol,
-					bfmOut = res,
-					xAxisCustom = xAxisCustom,
-					ylimCustom = ylimCustom,
-					ylab = toupper(colnames(serieSel())[matchCol])
-				)
-				plotBfmLegend()
-			}
-
-			output$action_downloadPlotBfm_jpg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfastmonitor", ".jpg"),
-				content = {function(file) {
-					jpeg(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBfmComb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotBfm_png <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfastmonitor", ".png"),
-				content = {function(file) {
-					png(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBfmComb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotBfm_svg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfastmonitor", ".svg"),
-				content = {function(file) {
-					svg(file, width = 16, height = 8)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBfmComb()
-					dev.off()
-				}}
-			)
-
-			# plot bfastmonitor results
-			plotBfm(
-				serie = serieSel(),
-				matchCol = matchCol,
-				bfmOut = res,
-				xAxisCustom = xAxisCustom,
-				ylimCustom = ylimCustom,
-				ylab = toupper(colnames(serieSel())[matchCol])
-			)
-		})
-
-		# bfast01 results plot
-		output$plot_bf01 <- renderPlot({
-			if(input$select_bf01_formula != "trend") {
-				validate(
-					need(
-						input$select_bf01_order <= orderMaxBf01,
-						FALSE
-					)
-				)
-			}
-
-			bf01_formula <- switch(
-				input$select_bf01_formula,
-				"trend + harmon" = response ~ trend + harmon,
-				"harmon" = response ~ harmon,
-				"trend" = response ~ trend
-			)
-
-			res <- ppBfast01(
-				x = serieSel()[, matchCol],
-				date = serieSel()$date,
-				formula = bf01_formula,
-				order = input$select_bf01_order
-			)
-
-			output$action_downloadDataBf01 <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-results-bfast01", ".rds"),
-				content = {function(file) {
-					saveRDS(object = res,
-							file = file)
-				}}
-			)
-
-			plotBf01Comb <- function() {
-				plotBf01(
-					serie = serieSel(),
-					matchCol = matchCol,
-					bf01Out = res,
-					xAxisCustom = xAxisCustom,
-					ylimCustom = ylimCustom,
-					ylab = toupper(colnames(serieSel())[matchCol])
-				)
-				plotBf01Legend()
-			}
-
-			output$action_downloadPlotBf01_jpg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast01", ".jpg"),
-				content = {function(file) {
-					jpeg(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBf01Comb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotBf01_png <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast01", ".png"),
-				content = {function(file) {
-					png(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBf01Comb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotBf01_svg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast01", ".svg"),
-				content = {function(file) {
-					svg(file, width = 16, height = 8)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBf01Comb()
-					dev.off()
-				}}
-			)
-
-			plotBf01(
-				serie = serieSel(),
-				matchCol = matchCol,
-				bf01Out = res,
-				xAxisCustom = xAxisCustom,
-				ylimCustom = ylimCustom,
-				ylab = toupper(colnames(serieSel())[matchCol])
-			)
-		})
-
-		# bfast results plot
-		output$plot_bfast <- renderPlot({
-			res <- ppBfast(
-				x = serieSel()[, matchCol],
-				date = serieSel()$date,
-				h = input$select_bfast_h,
-				season = input$select_bfast_season
-			)
-
-			output$action_downloadDataBfast <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-results-bfast", ".rds"),
-				content = {function(file) {
-					saveRDS(object = res,
-							file = file)
-				}}
-			)
-
-			plotBfastComb <- function() {
-				plotBfast(
-					serie = serieSel(),
-					matchCol = matchCol,
-					bfastOut = res,
-					xAxisCustom = xAxisCustom,
-					ylimCustom = ylimCustom,
-					ylab = toupper(colnames(serieSel())[matchCol])
-				)
-				plotBfastLegend()
-			}
-
-			output$action_downloadPlotBfast_jpg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast", ".jpg"),
-				content = {function(file) {
-					jpeg(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBfastComb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotBfast_png <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast", ".png"),
-				content = {function(file) {
-					png(file, width = 1080, height = 600)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBfastComb()
-					dev.off()
-				}}
-			)
-
-			output$action_downloadPlotBfast_svg <- downloadHandler(
-				filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast", ".svg"),
-				content = {function(file) {
-					svg(file, width = 16, height = 8)
-					layout(mat = matrix(c(1, 2), ncol = 2),
-						   widths = c(1.5, 0.5))
-					plotBfastComb()
-					dev.off()
-				}}
-			)
-
-			plotBfast(
-				serie = serieSel(),
-				matchCol = matchCol,
-				bfastOut = res,
-				xAxisCustom = xAxisCustom,
-				ylimCustom = ylimCustom,
-				ylab = toupper(colnames(serieSel())[matchCol])
-			)
-		})
-
-		# raw time series legend
-		output$plot_raw_legend <- renderPlot({
-			plotRawLegend(
-				satOrder = satOrder,
-				seriePar = seriePar
-			)
-		})
-
-		# bfastmonitor legend
-		output$plot_bfm_legend <- renderPlot({
-			plotBfmLegend()
-		})
-
-		# bfast01 legend
-		output$plot_bf01_legend <- renderPlot({
-			plotBf01Legend()
-		})
-
-		# bfast legend
-		output$plot_bfast_legend <- renderPlot({
-			plotBfastLegend()
-		})
-	})
-
 # ------------------------------------------------------------- APP 2 (DOWNLOAD) ----
 
 	pixel_filedata <- reactive({
@@ -1133,28 +611,66 @@ shinyServer(function(input, output, session) {
 	# Download raster
 	observeEvent(input$raster_botaoDownload, {
 
+		# isolate ({
+		# 	infile <- input$raster_datafile
+		# 	shapePath <- file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5))
+		# 	shape <- raster_filedata()[[1]]
+		# })
+		#
+		# python.assign("msg", NULL) # msg para ser exibida ao final
+		# python.assign("shape", shape) # nome do shapefile
+		# python.assign("shapePath", shapePath) # path da pasta descomprimida
+		# python.assign("satellite", input$raster_satellite) # numero do satelite
+		# python.assign("satprod", input$raster_versionLS) # versao do landsat
+		# python.assign("periodStart", as.character(input$raster_periodStart)) # data para comecar a baixar
+		# python.assign("periodEnd", as.character(input$raster_periodEnd)) # data que termina de baixar
+		#
+		# # Seta o caminho para salvar as imagens
+		# pathRaster <- file.path(tempdir())
+		# python.assign("pathRaster", pathRaster)
+		#
+		# # Executa o script do Python
+		# pathR <- getwd()
+		# python.load(file.path("python-download/gee-ls-prepare.py"))
+		#
+		# # Pega o numero de imagens para serem baixadas
+		# nRaster <- python.get("imgColLen")
+		#
+		# if(nRaster > 0) {
+		# 	withProgress(message = 'Downloading', value = 0, {
+		# 		for(i in 0:(nRaster-1)) {
+		# 			setProgress((i+1) / nRaster, detail = paste0((i+1), "/", nRaster))
+		# 			python.assign("i", i) # atualizada o valor de i do loop
+		# 			python.load(file.path(pathR, "python-download/download-raster-ls.py"))
+		# 		}
+		# 	})
+		# 	if(input$download_SRTM) {
+		# 		python.load(file.path(pathR,"python-download/download-SRTM.py"))
+		# 	}
+		# }
+		#
+		# output$msg <- renderText({ python.get("msg") })
+		#
+		# setwd(pathR)
+
+		workpath <- getwd()
 		isolate ({
 			infile <- input$raster_datafile
 			shapePath <- file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5))
 			shape <- raster_filedata()[[1]]
 		})
 
-		python.assign("msg", NULL) # msg para ser exibida ao final
-		python.assign("shape", shape) # nome do shapefile
+		python.assign("msg", NULL) # nome da pasta descomprimida
+		python.assign("shape", shape) # nome da pasta descomprimida
 		python.assign("shapePath", shapePath) # path da pasta descomprimida
 		python.assign("satellite", input$raster_satellite) # numero do satelite
 		python.assign("satprod", input$raster_versionLS) # versao do landsat
 		python.assign("periodStart", as.character(input$raster_periodStart)) # data para comecar a baixar
 		python.assign("periodEnd", as.character(input$raster_periodEnd)) # data que termina de baixar
 
-		# Seta o caminho para salvar as imagens
-
-		pathRaster <- file.path(tempdir())
-		python.assign("pathRaster", pathRaster)
-
 		# Executa o script do Python
 		pathR <- getwd()
-		python.load(file.path("python-download/gee-ls-prepare.py"))
+		python.load(file.path(pathR, "python-download/gee-ls-prepare.py"))
 
 		# Pega o numero de imagens para serem baixadas
 		nRaster <- python.get("imgColLen")
@@ -1174,7 +690,7 @@ shinyServer(function(input, output, session) {
 
 		output$msg <- renderText({ python.get("msg") })
 
-		setwd(pathR)
+		setwd(workpath)
 
 	})
 
@@ -1322,10 +838,12 @@ shinyServer(function(input, output, session) {
 		# com nomes diferentes na pasta temporaria
 
 		old_name <- input$arquivo$datapath[2]
+		extOld <- str_sub(old_name,-4,-1)
+		nroName <- str_sub(input$arquivo$datapath[1],-5,-5)
 		new_name <- paste0(substr(input$arquivo$datapath[2],
 										  start = 1,
 										  stop = nchar(input$arquivo$datapath[2])-5),
-								 "0.grd"
+								 paste0(nroName, extOld)
 		)
 
 		system(paste("mv", old_name, new_name))
@@ -1343,7 +861,7 @@ shinyServer(function(input, output, session) {
 	# acessar com v2()
 	v2 <- eventReactive(input$botaoLeitura, {
 		withProgress(message = 'Processing input data...', value = NULL, {
-			temp <- extract(s2(), 1:ncell(s2()))
+			temp <- raster::extract(s2(), 1:ncell(s2()))
 			temp[is.na(temp)] <- 0
 			temp
 		})
@@ -1353,8 +871,10 @@ shinyServer(function(input, output, session) {
 		par(mar=c(4,2,1,1)+0.1)
 		v2()
 		image(s2()[[1]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
-		image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
-					  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
+		dfraster <- s2()[[1]] %>% rasterToPoints()
+		image.plot(x = dfraster[,1], y = dfraster[,2], z = dfraster[,3]/10000, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+					  legend.only = T, horizontal=T, smallplot=c(.23,.79,.12,.14))
+
 	})
 
 	# Aba Visualizacao
@@ -1385,8 +905,10 @@ shinyServer(function(input, output, session) {
 			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
 			points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=19, col="white", cex=1.5)
 			points(extent(s2())[1]+res(s2())[1]*input$x, extent(s2())[4]-res(s2())[2]*input$y, pch=21, col="black", cex=1.5)
-			image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
-						  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
+
+			dfraster <- s2()[[1]] %>% rasterToPoints()
+			image.plot(x = dfraster[,1], y = dfraster[,2], z = dfraster[,3]/10000, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+						  legend.only = T, horizontal=T, smallplot=c(.23,.79,.12,.14))
 		}
 	})
 
@@ -1419,8 +941,10 @@ shinyServer(function(input, output, session) {
 			image(s2()[[input$t_querySlider]], col=rev(terrain.colors(128)), xaxt="n", yaxt="n", xlab="", ylab="")
 			axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
 			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
-			image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
-						  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
+
+			dfraster <- s2()[[1]] %>% rasterToPoints()
+			image.plot(x = dfraster[,1], y = dfraster[,2], z = dfraster[,3]/10000, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+						  legend.only = T, horizontal=T, smallplot=c(.23,.79,.12,.14))
 		}
 	})
 
@@ -1432,8 +956,10 @@ shinyServer(function(input, output, session) {
 			axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
 			points(extent(s2())[1]+res(s2())[1]*input$x_querySlider, extent(s2())[4]-res(s2())[2]*input$y_querySlider, pch=19, col="white", cex=1.5)
 			points(extent(s2())[1]+res(s2())[1]*input$x_querySlider, extent(s2())[4]-res(s2())[2]*input$y_querySlider, pch=21, col="black", cex=1.5)
-			image.plot(s2()[[1]] %>% as.matrix, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
-						  legend.only=T, horizontal=T, smallplot=c(.23,.79,.12,.14))
+
+			dfraster <- s2()[[1]] %>% rasterToPoints()
+			image.plot(x = dfraster[,1], y = dfraster[,2], z = dfraster[,3]/10000, col=rev(terrain.colors(128)), xaxt="n", yaxt="n",
+						  legend.only = T, horizontal=T, smallplot=c(.23,.79,.12,.14))
 		}
 	})
 
@@ -1539,75 +1065,126 @@ shinyServer(function(input, output, session) {
 		})
 	})
 
-	observeEvent(input$botaoCluster, {
-		output$plot_5 <- renderPlot({
+	observeEvent(input$botaoElbow, {
+		if(!is.null(pathGrd())) {
+			withProgress(message = 'Computing Elbow...', value = NULL, {
+				dist1 <- distFun()
 
-			withProgress(message = 'Clustering...', value = NULL, {
-				isolate({
-					if (input$tipo_entrada == "Specify the point (x,y)") {
-						qx <- input$x_querySlider
-						qy <- input$y_querySlider
-					} else {
-						qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
-						qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
-					}
+				dist2 <- dist(dist1)
 
-					if(length(qx) > 0 && length(qy) > 0) {
-						dist1 <- distFun()
+				wss <- NULL
+				for (i in 2:15){
+					set.seed(100)
+					wss[i] <- sum(kmeans(dist1, centers=i)$withinss)
+				}
 
-						dist2 <- dist(dist1)
-
-						wss <- NULL
-						for (i in 2:15){
-							set.seed(100)
-							wss[i] <- sum(kmeans(dist1, centers=i)$withinss)
-						}
-
-						par(mar=c(4,4,2,1)+0.1)
-						plot(1:15, wss, type = "b", xlab="Number of Clusters",
-							  ylab="Within groups Sum of Squares")
-						points(x = input$selectCluster, y = wss[as.numeric(input$selectCluster)], col = "red", pch = 20, cex = 2)
-					}
-				})
+				wtest <<- wss
 			})
-		})
+		}
 	})
 
 	observeEvent(input$botaoCluster, {
-		output$plot_6 <- renderPlot({
+		if(input$selectCluster > 0) {
+			output$plot_5 <- renderPlot({
 
-			withProgress(message = 'Clustering...', value = NULL, {
-				isolate({
-					if (input$tipo_entrada == "Specify the point (x,y)") {
-						qx <- input$x_querySlider
-						qy <- input$y_querySlider
-					} else {
-						qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
-						qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
-					}
+				withProgress(message = 'Clustering...', value = NULL, {
+					isolate({
+						if (input$tipo_entrada == "Specify the point (x,y)") {
+							qx <- input$x_querySlider
+							qy <- input$y_querySlider
+						} else {
+							qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
+							qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
+						}
 
-					if(length(qx) > 0 && length(qy) > 0) {
+						if(length(qx) > 0 && length(qy) > 0) {
 
-						clusters <- kmeans(distFun(), centers = input$selectCluster)
+							wss <- wtest
 
-						clusterRaster <- s2()[[1]]
-						values(clusterRaster) <- clusters$cluster
-
-						par(mar=c(4,2,1,1)+0.1)
-
-						# colCluster <- colorRampPalette(brewer.pal(as.numeric(input$selectCluster), "Set2"))
-						# image(clusterRaster, col=colCluster(as.numeric(input$selectCluster)), xaxt="n", yaxt="n", xlab="", ylab="")
-						image(clusterRaster, col = rainbow(as.numeric(input$selectCluster)), xaxt="n", yaxt="n", xlab="", ylab="")
-						axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
-						axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
-						image.plot(clusterRaster %>% as.matrix, col = rainbow(as.numeric(input$selectCluster)), xaxt="n", yaxt="n",
-									  legend.only = T, horizontal=T, smallplot=c(.23,.79,.12,.14),
-									  legend.lab="                     (Cluster)                     ")
-
-					}
+							par(mar=c(4,4,2,1)+0.1)
+							plot(1:15, wss, type = "b", xlab="Number of Clusters",
+								  ylab="Within groups Sum of Squares")
+							points(x = input$selectCluster, y = wss[as.numeric(input$selectCluster)], col = "red", pch = 20, cex = 2)
+						}
+					})
 				})
 			})
-		})
+		}
+	})
+
+	# observeEvent(input$botaoCluster, {
+	# 	output$plot_5 <- renderPlot({
+	#
+	# 		withProgress(message = 'Clustering...', value = NULL, {
+	# 			isolate({
+	# 				if (input$tipo_entrada == "Specify the point (x,y)") {
+	# 					qx <- input$x_querySlider
+	# 					qy <- input$y_querySlider
+	# 				} else {
+	# 					qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
+	# 					qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
+	# 				}
+	#
+	# 				if(length(qx) > 0 && length(qy) > 0) {
+	# 					dist1 <- distFun()
+	#
+	# 					dist2 <- dist(dist1)
+	#
+	# 					wss <- NULL
+	# 					for (i in 2:15){
+	# 						set.seed(100)
+	# 						wss[i] <- sum(kmeans(dist1, centers=i)$withinss)
+	# 					}
+	#
+	# 					par(mar=c(4,4,2,1)+0.1)
+	# 					plot(1:15, wss, type = "b", xlab="Number of Clusters",
+	# 						  ylab="Within groups Sum of Squares")
+	# 					points(x = input$selectCluster, y = wss[as.numeric(input$selectCluster)], col = "red", pch = 20, cex = 2)
+	# 				}
+	# 			})
+	# 		})
+	# 	})
+	# })
+
+	observeEvent(input$botaoCluster, {
+		if(input$selectCluster > 0) {
+			output$plot_6 <- renderPlot({
+
+				withProgress(message = 'Clustering...', value = NULL, {
+					isolate({
+						if (input$tipo_entrada == "Specify the point (x,y)") {
+							qx <- input$x_querySlider
+							qy <- input$y_querySlider
+						} else {
+							qx <- round((as.double(input$plotClick_3$x)-extent(s2())[1])/res(s2())[1])
+							qy <- round((extent(s2())[4]-as.double(input$plotClick_3$y))/res(s2())[2])
+						}
+
+						if(length(qx) > 0 && length(qy) > 0) {
+
+							clusters <- kmeans(distFun(), centers = input$selectCluster)
+
+							clusterRaster <- s2()[[1]]
+							values(clusterRaster) <- clusters$cluster
+
+							par(mar=c(4,2,1,1)+0.1)
+
+							# colCluster <- colorRampPalette(brewer.pal(as.numeric(input$selectCluster), "Set2"))
+							# image(clusterRaster, col=colCluster(as.numeric(input$selectCluster)), xaxt="n", yaxt="n", xlab="", ylab="")
+							image(clusterRaster, col = rainbow(as.numeric(input$selectCluster)), xaxt="n", yaxt="n", xlab="", ylab="")
+							axis(1, at=c(extent(s2())[1],extent(s2())[2]), labels=c(1,ncol(s2())))
+							axis(2, at=c(extent(s2())[3],extent(s2())[4]), labels=c(nrow(s2()),1))
+
+							dfraster <- clusterRaster %>% rasterToPoints()
+							image.plot(x = dfraster[,1], y = dfraster[,2], z = dfraster[,3], col = rainbow(as.numeric(input$selectCluster)), xaxt="n", yaxt="n",
+										  legend.only = T, horizontal=T, smallplot=c(.23,.79,.12,.14),
+										  legend.lab="                     (Cluster)                     ")
+
+						}
+					})
+				})
+			})
+		}
 	})
 
 # ------------------------------------------------------------- APP 4 (GP Classifier) ----

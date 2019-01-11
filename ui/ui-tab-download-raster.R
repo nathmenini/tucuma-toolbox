@@ -22,9 +22,11 @@ tabPanel(
 
 		selectInput(inputId = "raster_versionLS",
 						label = "Landsat SR Version",
-						choices = list("Collection 1" = "SR_new",
-											"Pre-Collection" = "SR_old",
-											"TOA" = "TOA")),
+						choices = list("Collection 1" = "SR_new")
+						# choices = list("Collection 1" = "SR_new",
+						# 					"Pre-Collection" = "SR_old",
+						# 					"TOA" = "TOA")
+						),
 		selectInput(inputId = "raster_satellite",
 						label = "Landsat Number",
 						choices = list(4, 5, 7, 8)),
