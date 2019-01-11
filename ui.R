@@ -1,6 +1,6 @@
 shinyUI(navbarPage(
 	title = div(em(strong("Tucumã Toolbox"))),
-	windowTitle = "Ecological Toolbox",
+	windowTitle = "Tucumã Toolbox",
 
 	id = "navbar",
 	position = "fixed-top",

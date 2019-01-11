@@ -695,18 +695,18 @@ shinyServer(function(input, output, session) {
 	})
 
 	# Salvando dados de Raster
-	output$action_downloadDataRaster <- downloadHandler(
-		filename = paste0("images-downloaded", ".zip"),
-		content = {function(file) {
-				pathAux <- getwd()
-				setwd(file.path(tempdir(), "raster"))
-				zip(zipfile = file, files = isolate ({
-					shape <- raster_filedata()[[1]]
-				}))
-				setwd(pathAux)
-			}
-		}
-	)
+	# output$action_downloadDataRaster <- downloadHandler(
+	# 	filename = paste0("images-downloaded", ".zip"),
+	# 	content = {function(file) {
+	# 			pathAux <- getwd()
+	# 			setwd(file.path(tempdir(), "raster"))
+	# 			zip(zipfile = file, files = isolate ({
+	# 				shape <- raster_filedata()[[1]]
+	# 			}))
+	# 			setwd(pathAux)
+	# 		}
+	# 	}
+	# )
 
 	# Plotting
 	output$pixel_leaf <- renderLeaflet({

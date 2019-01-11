@@ -51,11 +51,11 @@ tabPanel(
 			icon = icon("download", lib = "font-awesome"),
 			width = "50%"
 		),
-		downloadButton(
-			outputId = "action_downloadDataRaster",
-			label = "Data",
-			class = "btn-primary"
-		),
+		# downloadButton(
+		# 	outputId = "action_downloadDataRaster",
+		# 	label = "Data",
+		# 	class = "btn-primary"
+		# ),
 		textOutput("msg")
 	),
 
