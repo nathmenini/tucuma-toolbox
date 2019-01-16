@@ -87,7 +87,7 @@ ppBfast01 <- function(x, date, ...) {
 	return(tmp)
 }
 
-ppBfast <- function(x, date, ...) {
+ppBfast <- function(x, date, smoothTs = F, startPeriod, endPeriod,...) {
 	# bfast needs regularly spaced data. Here, we force the data regularity
 	# with a monthly aggregation. Temporal gaps are linearly filled.
 	timeYM <- strftime(date, "%Y-%m")
@@ -129,6 +129,40 @@ ppBfast <- function(x, date, ...) {
 		   frequency = 12),
 		rule = 2
 	)
+
+	if(smoothTs == T) {
+
+		startOriginal <- (dts %>% time %>% as.Date())[1]
+		endOriginal <- tail(dts %>% time %>% as.Date(), 1)
+
+		if((startOriginal <= startPeriod) &
+			(endOriginal >= endPeriod) &
+			(startPeriod < endPeriod)) {
+			anoInicio <- substr(startPeriod, 1, 4) %>% as.numeric()
+			mesInicio <- substr(startPeriod, 6, 7) %>% as.numeric()
+
+			anoFinal <- substr(endPeriod, 1, 4) %>% as.numeric()
+			mesFinal <- substr(endPeriod, 6, 7) %>% as.numeric()
+
+			dts <- window(dts,
+							  start = c(anoInicio, mesInicio),
+							  end = c(anoFinal, mesFinal))
+
+			mYear <- anoInicio
+			mMonth <- mesInicio
+		}
+
+		dfSmooth <- data.frame(index = dts %>% as.numeric,
+									  time = dts %>% time %>% as.numeric)
+
+		# suavizando a serie
+		fitLoess <- loess(index~time, data = dfSmooth, span = 0.6)
+		predLoess <- predict(fitLoess, newdata = dfSmooth$time)
+		dfSmooth$predLoess <- predLoess
+
+		# tornando a suavizacao em uma serie temporal
+		dts <- ts(dfSmooth$predLoess, start = c(mYear, mMonth), frequency = 12)
+	}
 
 	tmp <- bfast(dts, max.iter = 1, ...)
 	return(tmp)
@@ -472,25 +506,44 @@ plotBf01Legend <- function() {
 		   col = c("black", "blue", "red"))
 }
 
-plotBfast <- function(serie, matchCol, bfastOut, xAxisCustom, ylimCustom, ylab) {
+plotBfast <- function(serie, matchCol, bfastOut, xAxisCustom, ylimCustom, ylab, smoothTs = F) {
+
+	if(smoothTs == T) {
+		ylimCustom <- round(c(min(bfastOut$Yt), max(bfastOut$Yt)), 4)
+		y <- bfastOut$Yt
+		x <- bfastOut$Yt %>% time %>% as.Date()
+	} else{
+		y <- serie[, matchCol]
+		x <- serie$date
+	}
+
 	# background blank plot
 	par(mar = c(4, 4, 0, 0) + 0.1)
-	plot(y = serie[, matchCol],
-		 x = serie$date,
-		 col = "white",
-		 axes = F,
-		 ylim = ylimCustom,
-		 ylab = ylab,
-		 xlab = "Time")
+	plot(y = y,
+		x = x,
+		col = "white",
+		axes = F,
+		ylim = ylimCustom,
+		ylab = ylab,
+		xlab = "Time"
+	)
 
 	# redraw axis
 	axis(side = 1,
 		 at = date(paste0(xAxisCustom, "-01-01")),
 		 labels = xAxisCustom)
 	if(ylimCustom[1] == -1) {
-		yAxisStep <- 0.2
+		if(smoothTs == F){
+			yAxisStep <- 0.2
+		} else{
+			yAxisStep <- 0.02
+		}
 	} else {
-		yAxisStep <- 0.1
+		if(smoothTs == F){
+			yAxisStep <- 0.1
+		} else{
+			yAxisStep <- 0.01
+		}
 	}
 	axis(side = 2,
 		 at = seq(ylimCustom[1], ylimCustom[2], yAxisStep))

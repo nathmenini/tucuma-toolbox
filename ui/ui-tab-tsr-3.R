@@ -11,7 +11,7 @@ tabPanel(
 						c("Manhattan Distance",
 						  "Euclidian Distance",
 						  "Chebyshev Distance",
-						  "DTW Distance",
+						  "DTW Similarity",
 						  "Cosine Similarity"
 						)
 		),

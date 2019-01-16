@@ -290,6 +290,28 @@ tabPanel(
 							)
 						)
 					),
+					# switch to smooth the time series data
+					checkboxInput(
+						inputId = "smooth_ts",
+						label = "Smooth time series?",
+						value = F,
+						width = "100%"
+					),
+					dateInput(
+						inputId = "select_start_period_bfast",
+						label = "Start period",
+						width = "100%",
+						min = "1980-01-01",
+						format = "yyyy-mm",
+						startview = "decade"
+					),
+					dateInput(
+						inputId = "select_end_period_bfast",
+						label = "End period",
+						width = "100%",
+						format = "yyyy-mm",
+						startview = "decade"
+					),
 					# buttons to download the data and the plot figures
 					h5(style = "cursor:default;", strong("Download")),
 					downloadButton(outputId = "action_downloadDataBfast",
