@@ -626,6 +626,17 @@ observe({
 			}}
 		)
 
+		output$action_downloadPlotRaw_pdf <- downloadHandler(
+			filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-ts", ".pdf"),
+			content = {function(file) {
+				pdf(file, width = 16, height = 8)
+				layout(mat = matrix(c(1, 2), ncol = 2),
+						 widths = c(1.5, 0.5))
+				plotRawComb()
+				dev.off()
+			}}
+		)
+
 		plotRaw(
 			serie = serieSel(),
 			matchCol = matchCol,
@@ -718,6 +729,17 @@ observe({
 			}}
 		)
 
+		output$action_downloadPlotBfm_pdf <- downloadHandler(
+			filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfastmonitor", ".pdf"),
+			content = {function(file) {
+				pdf(file, width = 16, height = 8)
+				layout(mat = matrix(c(1, 2), ncol = 2),
+						 widths = c(1.5, 0.5))
+				plotBfmComb()
+				dev.off()
+			}}
+		)
+
 		# plot bfastmonitor results
 		plotBfm(
 			serie = serieSel(),
@@ -800,6 +822,17 @@ observe({
 			filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast01", ".svg"),
 			content = {function(file) {
 				svg(file, width = 16, height = 8)
+				layout(mat = matrix(c(1, 2), ncol = 2),
+						 widths = c(1.5, 0.5))
+				plotBf01Comb()
+				dev.off()
+			}}
+		)
+
+		output$action_downloadPlotBf01_pdf <- downloadHandler(
+			filename = paste0("be-", colnames(serieSel())[matchCol], "-plot-bfast01", ".pdf"),
+			content = {function(file) {
+				pdf(file, width = 16, height = 8)
 				layout(mat = matrix(c(1, 2), ncol = 2),
 						 widths = c(1.5, 0.5))
 				plotBf01Comb()
@@ -951,6 +984,7 @@ observe({
 		} else {
 			unzip(infile$datapath, exdir = infolder)
 			shp <- shapefile(file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5), paste0(nameShape, ".shp")))
+			shp <- spTransform(shp, proj_ll)
 			return(list(nameShape, shp))
 		}
 	})
@@ -1801,6 +1835,7 @@ observe({
 		} else {
 			unzip(infile$datapath, exdir = infolder)
 			shp <- shapefile(file.path(substr(infile$datapath, 1, nchar(infile$datapath) - 5), paste0(nameShape, ".shp")))
+			shp <- spTransform(shp, proj_ll)
 			return(list(nameShape, spTransform(shp, proj_ll)))
 		}
 	})
