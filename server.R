@@ -31,11 +31,11 @@ v <- reactiveValues(markerId = 1,
 # render leaflet map
 output$leaf <- renderLeaflet({
 
-	long <- c(-69.375, -61.375, -69.075)
-	lat <- c(-8.625, -2.575, -0.825)
-
-	long2 <- c(-73.925, -68.975, -72.575)
-	lat2 <- c(-4.175, -6.425, -2.025)
+	# long <- c(-69.375, -61.375, -69.075)
+	# lat <- c(-8.625, -2.575, -0.825)
+	#
+	# long2 <- c(-73.925, -68.975, -72.575)
+	# lat2 <- c(-4.175, -6.425, -2.025)
 
 	m <- leaflet(options = list(attributionControl = F)) %>%
 		addTiles(
@@ -54,9 +54,9 @@ output$leaf <- renderLeaflet({
 				subdomains = c("mt0", "mt1", "mt2", "mt3")
 			)
 		) %>%
-		setMaxBounds(-180, -90, 180, 90) %>%
-		addCircles(lng = long, lat = lat, color = "red") %>%
-		addCircles(lng = long2, lat = lat2, color = "blue")
+		setMaxBounds(-180, -90, 180, 90) #%>%
+		# addCircles(lng = long, lat = lat, color = "red") %>%
+		# addCircles(lng = long2, lat = lat2, color = "blue")
 	m
 })
 
