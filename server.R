@@ -2226,6 +2226,7 @@ observe({
 				dRaw <<- distMat(bfastOutput, p = 0)
 				d <<- distMat(bfastOutput, p = 1)
 				classif <<- c(rep("euc", 250), rep("other", 250)) # eucalipto
+				# trocar o valor de other para considerar mais amostras
 
 				save(file = file.path("GPFolder/eucalipto-guerric-modis-ndvi-1.RData"),
 					  list = c("d", "dRaw", "classif"), # eucalipto
@@ -2245,38 +2246,39 @@ observe({
 
 		if(exists("dRaw")) {
 			withProgress(message = 'Running GP...', value = NULL, {
+				# incrementar para aumentar o numero de replicacoes
+				for(sd in 1:1){
+					keep <- 250
+					#procNum <- 0
+					if(!is.factor(classif)) classif <- factor(classif)
+					classif <- classif[1:(250 + keep)]
 
+					d <- lapply(d, function(x) {
+						as.dist(as.matrix(x)[1:(250 + keep), 1:(250 + keep)])
+					})
+					dRaw <- lapply(dRaw, function(x) {
+						as.dist(as.matrix(x)[1:(250 + keep), 1:(250 + keep)])
+					})
 
-				keep <- 250
-				procNum <- 0
-				if(!is.factor(classif)) classif <- factor(classif)
-				classif <- classif[1:(250 + keep)]
+					#sd <- procNum + 1
 
-				d <- lapply(d, function(x) {
-					as.dist(as.matrix(x)[1:(250 + keep), 1:(250 + keep)])
-				})
-				dRaw <- lapply(dRaw, function(x) {
-					as.dist(as.matrix(x)[1:(250 + keep), 1:(250 + keep)])
-				})
+					elapsed <- proc.time()
 
-				sd <- procNum + 1
+					gpTmp <- gpRun(
+						dDec = d,
+						dRaw = dRaw,
+						classif = classif,
+						seed = sd,
+						distType = "eq",
+						nFolds = 5
+					)
 
-				elapsed <- proc.time()
+					elapsed <- proc.time() - elapsed
 
-				gpTmp <- gpRun(
-					dDec = d,
-					dRaw = dRaw,
-					classif = classif,
-					seed = sd,
-					distType = "eq",
-					nFolds = 5
-				)
-
-				elapsed <- proc.time() - elapsed
-
-				gpRes <- NULL
-				attributes(gpTmp) <- list(seed = sd)
-				gpRes[[sd]] <- gpTmp
+					gpRes <- list()
+					attributes(gpTmp) <- list(seed = sd)
+					gpRes[[sd]] <- gpTmp
+				}
 
 				# dir.create(paste0("results/", f_region, "/", f_sat, "/"), showWarnings = F)
 				save(file = file.path("GPFolder", "resultsGP.Rdata"),
